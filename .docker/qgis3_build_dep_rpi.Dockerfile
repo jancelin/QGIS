@@ -1,21 +1,12 @@
 FROM      debian:stretch
-MAINTAINER Denis Rouzaud <denis@opengis.ch>
+MAINTAINER JULIEN ANCELIN from Denis Rouzaud <denis@opengis.ch>
 
 LABEL Description="Docker container with QGIS dependencies" Vendor="QGIS.org" Version="1.0"
-
-# && echo "deb http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
-# && echo "deb-src http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
-# && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 314DF160 \
-RUN echo "deb    http://http.debian.net/debian sid  main " >> /etc/apt/sources.list \
-    && gpg --keyserver pgpkeys.mit.edu --recv-key 7638D0442B90D010 \
-    && gpg -a --export 7638D0442B90D010 | sudo apt-key add - \
-    && gpg --keyserver pgpkeys.mit.edu --recv-key 8B48AD6246925553 \
-    && gpg -a --export 8B48AD6246925553 | sudo apt-key add - 
 
 RUN  apt-get update \
   && apt-get install -y software-properties-common \
   && apt-get update \
-  && apt-get install -t sid -y \
+  && apt-get install -y \
     bison \
     ca-certificates \
     ccache \
@@ -83,15 +74,14 @@ RUN  apt-get update \
     python3-termcolor \
     python3-yaml \
     qt3d5-dev \
-    # pour les 3 suivants sid only
-    qt3d-assimpsceneimport-plugin \ 
-    qt3d-defaultgeometryloader-plugin \ 
-    qt3d-scene2d-plugin \
+ #   qt3d-assimpsceneimport-plugin \
+ #   qt3d-defaultgeometryloader-plugin \
     qt3d-gltfsceneio-plugin \
+ #   qt3d-scene2d-plugin \
     qt5keychain-dev \
     qtbase5-dev \
     qtdeclarative5-dev-tools \
-#    qtdeclarative5-qtquick2-plugin \ #...innexistant debian armf
+#    qtdeclarative5-qtquick2-plugin \
     qtpositioning5-dev \
     qttools5-dev \
     qttools5-dev-tools \
@@ -104,13 +94,13 @@ RUN  apt-get update \
     xfonts-75dpi \
     xfonts-base \
     xfonts-scalable \
-    xvfb \
-    #rajouté
-    build-essential \ 
-    libssl-dev \ 
-    libffi-dev 
-
+    xvfb 
 RUN apt-get install -y build-essential libssl-dev libffi-dev 
+RUN echo "deb    http://http.debian.net/debian sid  main " >> /etc/apt/sources.list 
+RUN  apt-get update 
+RUN apt-get -t sid install -y  qt3d-assimpsceneimport-plugin \ 
+    qt3d-defaultgeometryloader-plugin \ 
+    qt3d-scene2d-plugin 
 RUN pip3 install \
     psycopg2 \
     numpy \
@@ -121,8 +111,9 @@ RUN pip3 install \
     termcolor \
     owslib \
     oauthlib \
-    pyopenssl \
-  && apt-get clean
+    pyopenssl 
+
+#RUN  apt-get clean
 
 RUN echo "alias python=python3" >> ~/.bash_aliases
 
