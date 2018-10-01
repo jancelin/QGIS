@@ -104,7 +104,7 @@ RUN  apt-get update \
     xfonts-75dpi \
     xfonts-base \
     xfonts-scalable \
-    xvfb 
+    xvfb \
     #rajouté
     build-essential \ 
     libssl-dev \ 
