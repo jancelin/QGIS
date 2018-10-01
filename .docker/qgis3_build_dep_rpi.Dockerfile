@@ -105,6 +105,11 @@ RUN  apt-get update \
     xfonts-base \
     xfonts-scalable \
     xvfb 
+    #rajouté
+    build-essential \ 
+    libssl-dev \ 
+    libffi-dev 
+
 RUN apt-get install -y build-essential libssl-dev libffi-dev 
 RUN pip3 install \
     psycopg2 \
