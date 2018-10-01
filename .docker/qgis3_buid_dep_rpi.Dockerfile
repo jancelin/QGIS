@@ -6,11 +6,16 @@ LABEL Description="Docker container with QGIS dependencies" Vendor="QGIS.org" Ve
 # && echo "deb http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
 # && echo "deb-src http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
 # && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 314DF160 \
+RUN echo "deb    http://http.debian.net/debian sid  main " >> /etc/apt/sources.list \
+    && gpg --keyserver pgpkeys.mit.edu --recv-key 7638D0442B90D010 \
+    && gpg -a --export 7638D0442B90D010 | sudo apt-key add - \
+    && gpg --keyserver pgpkeys.mit.edu --recv-key 8B48AD6246925553 \
+    && gpg -a --export 8B48AD6246925553 | sudo apt-key add - 
 
 RUN  apt-get update \
   && apt-get install -y software-properties-common \
   && apt-get update \
-  && apt-get install -y \
+  && apt-get install -t sid -y \
     bison \
     ca-certificates \
     ccache \
@@ -68,7 +73,7 @@ RUN  apt-get update \
     python3-mock \
     python3-nose2 \
     python3-pip \
-        python3-psycopg2 \
+    python3-psycopg2 \
     python3-pyqt5 \
     python3-pyqt5.qsci \
     python3-pyqt5.qtsql \
@@ -78,14 +83,15 @@ RUN  apt-get update \
     python3-termcolor \
     python3-yaml \
     qt3d5-dev \
- #   qt3d-assimpsceneimport-plugin \
- #   qt3d-defaultgeometryloader-plugin \
+    # pour les 3 suivants sid only
+    qt3d-assimpsceneimport-plugin \ 
+    qt3d-defaultgeometryloader-plugin \ 
+    qt3d-scene2d-plugin \
     qt3d-gltfsceneio-plugin \
- #   qt3d-scene2d-plugin \
     qt5keychain-dev \
     qtbase5-dev \
     qtdeclarative5-dev-tools \
-#    qtdeclarative5-qtquick2-plugin \
+#    qtdeclarative5-qtquick2-plugin \ #...innexistant debian armf
     qtpositioning5-dev \
     qttools5-dev \
     qttools5-dev-tools \
