@@ -1,7 +1,11 @@
 FROM      debian:stretch
-MAINTAINER JULIEN ANCELIN from Denis Rouzaud <denis@opengis.ch>
+MAINTAINER Denis Rouzaud <denis@opengis.ch>
 
 LABEL Description="Docker container with QGIS dependencies" Vendor="QGIS.org" Version="1.0"
+
+# && echo "deb http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
+# && echo "deb-src http://ppa.launchpad.net/ubuntugis/ubuntugis-unstable/ubuntu xenial main" >> /etc/apt/sources.list \
+# && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 314DF160 \
 
 RUN  apt-get update \
   && apt-get install -y software-properties-common \
@@ -96,11 +100,6 @@ RUN  apt-get update \
     xfonts-scalable \
     xvfb 
 RUN apt-get install -y build-essential libssl-dev libffi-dev 
-RUN echo "deb    http://http.debian.net/debian sid  main " >> /etc/apt/sources.list 
-RUN  apt-get update 
-RUN apt-get -t sid install -y  qt3d-assimpsceneimport-plugin \ 
-    qt3d-defaultgeometryloader-plugin \ 
-    qt3d-scene2d-plugin 
 RUN pip3 install \
     psycopg2 \
     numpy \
@@ -111,9 +110,8 @@ RUN pip3 install \
     termcolor \
     owslib \
     oauthlib \
-    pyopenssl 
-
-#RUN  apt-get clean
+    pyopenssl \
+  && apt-get clean
 
 RUN echo "alias python=python3" >> ~/.bash_aliases
 
