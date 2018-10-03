@@ -1,4 +1,5 @@
-FROM      debian:stretch
+FROM      resin/raspberrypi3-ubuntu:bionic
+RUN [ "cross-build-start" ]
 MAINTAINER Denis Rouzaud <denis@opengis.ch>
 
 LABEL Description="Docker container with QGIS dependencies" Vendor="QGIS.org" Version="1.0"
@@ -45,7 +46,6 @@ RUN  apt-get update \
     libqt5webkit5-dev \
     libqt5xml5 \
     libqt5xmlpatterns5-dev \
-    libqt5serialport5-dev \
     libqwt-qt5-dev \
     libspatialindex-dev \
     libspatialite-dev \
@@ -78,14 +78,14 @@ RUN  apt-get update \
     python3-termcolor \
     python3-yaml \
     qt3d5-dev \
- #   qt3d-assimpsceneimport-plugin \
- #   qt3d-defaultgeometryloader-plugin \
+    qt3d-assimpsceneimport-plugin \
+    qt3d-defaultgeometryloader-plugin \
     qt3d-gltfsceneio-plugin \
- #   qt3d-scene2d-plugin \
+    qt3d-scene2d-plugin \
     qt5keychain-dev \
     qtbase5-dev \
     qtdeclarative5-dev-tools \
-#    qtdeclarative5-qtquick2-plugin \
+    qtdeclarative5-qtquick2-plugin \
     qtpositioning5-dev \
     qttools5-dev \
     qttools5-dev-tools \
@@ -98,9 +98,8 @@ RUN  apt-get update \
     xfonts-75dpi \
     xfonts-base \
     xfonts-scalable \
-    xvfb 
-RUN apt-get install -y build-essential libssl-dev libffi-dev 
-RUN pip3 install \
+    xvfb \
+  && pip3 install \
     psycopg2 \
     numpy \
     nose2 \
@@ -109,8 +108,6 @@ RUN pip3 install \
     future \
     termcolor \
     owslib \
-    oauthlib \
-    pyopenssl \
   && apt-get clean
 
 RUN echo "alias python=python3" >> ~/.bash_aliases
@@ -120,5 +117,6 @@ ENV CXX=/usr/lib/ccache/clang++
 ENV QT_SELECT=5
 ENV LANG=C.UTF-8
 ENV PATH="/usr/local/bin:${PATH}"
+RUN [ "cross-build-end" ]
 
 CMD /root/QGIS/.ci/travis/linux/docker-build-test.sh
