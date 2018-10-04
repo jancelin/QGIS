@@ -109,7 +109,15 @@ RUN  apt-get update \
     termcolor \
     owslib \
   && apt-get clean
-
+  
+#update sip4  
+RUN apt-get install -y wget \
+    wget https://sourceforge.net/projects/pyqt/files/sip/sip-4.19.13/sip-4.19.13.tar.gz \
+    tar xvzf sip-4.19.13.tar.gz \
+    cd sip-4.19.13 \
+    python configure.py \
+    sudo make install
+    
 RUN echo "alias python=python3" >> ~/.bash_aliases
 
 ENV CC=/usr/lib/ccache/clang
