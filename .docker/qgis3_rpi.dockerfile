@@ -4,7 +4,7 @@
 ARG DOCKER_TAG=latest
 ARG CACHE_DIR
 
-FROM  qgis3:build_dep_ubuntu
+FROM  build_dep_ubuntu_sip4_19_12
 RUN [ "cross-build-start" ]
 MAINTAINER julien ancelin for arm from Denis Rouzaud <denis@opengis.ch>
 
@@ -13,7 +13,7 @@ ENV CXX=/usr/lib/ccache/clang++
 ENV QT_SELECT=5
 ENV LANG=C.UTF-8
 
-COPY ./QGIS-final-3_0_3 /usr/src/QGIS
+COPY ./QGIS-final-3_2_3 /usr/src/QGIS
 
 COPY ${CACHE_DIR} /root/.ccache
 ENV CCACHE_DIR=/root/.ccache
@@ -32,11 +32,10 @@ RUN cmake \
   -DBINDINGS_GLOBAL_INSTALL=ON \
   -DWITH_STAGED_PLUGINS=ON \
   -DWITH_GRASS=OFF \
-  -DSUPPRESS_QT_WARNINGS=OFF \
+  -DSUPPRESS_QT_WARNINGS=ON \
   -DDISABLE_DEPRECATED=ON \
   -DENABLE_TESTS=OFF \
   -DWITH_QSPATIALITE=ON \
-  -DWITH_QWTPOLAR=OFF \
   -DWITH_APIDOC=OFF \
   -DWITH_ASTYLE=OFF \
  .. 
