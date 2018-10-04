@@ -113,7 +113,7 @@ RUN  apt-get update \
 #update sip4  
 RUN apt-get install -y wget \
     #wget https://sourceforge.net/projects/pyqt/files/sip/sip-4.19.13/sip-4.19.13.tar.gz \
-    wget https://sourceforge.net/projects/pyqt/files/sip/sip-4.19.12/sip-4.19.12.tar.gz/download \
+    wget https://sourceforge.net/projects/pyqt/files/sip/sip-4.19.12/sip-4.19.12.tar.gz \
     tar xvzf sip-4.19.12.tar.gz \
     cd sip-4.19.12 \
     python configure.py \
