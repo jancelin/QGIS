@@ -1161,7 +1161,7 @@ QString QgsSimpleMarkerSymbolLayer::ogrFeatureStyle( double mmScaleFactor, doubl
 
 QgsSymbolLayer *QgsSimpleMarkerSymbolLayer::createFromSld( QDomElement &element )
 {
-  QgsDebugMsg( "Entered." );
+  QgsDebugMsg( QStringLiteral( "Entered." ) );
 
   QDomElement graphicElem = element.firstChildElement( QStringLiteral( "Graphic" ) );
   if ( graphicElem.isNull() )
@@ -1400,7 +1400,7 @@ bool QgsSimpleMarkerSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScal
   }
   else
   {
-    QgsDebugMsg( QString( "Unsupported dxf marker name %1" ).arg( encodeShape( shape ) ) );
+    QgsDebugMsg( QStringLiteral( "Unsupported dxf marker name %1" ).arg( encodeShape( shape ) ) );
     return false;
   }
 
@@ -1641,6 +1641,15 @@ QSet<QString> QgsFilledMarkerSymbolLayer::usedAttributes( const QgsRenderContext
   if ( mFill )
     attr.unite( mFill->usedAttributes( context ) );
   return attr;
+}
+
+bool QgsFilledMarkerSymbolLayer::hasDataDefinedProperties() const
+{
+  if ( QgsSymbolLayer::hasDataDefinedProperties() )
+    return true;
+  if ( mFill && mFill->hasDataDefinedProperties() )
+    return true;
+  return false;
 }
 
 void QgsFilledMarkerSymbolLayer::setColor( const QColor &c )
@@ -2013,11 +2022,11 @@ void QgsSvgMarkerSymbolLayer::renderPoint( QPointF point, QgsSymbolRenderContext
   double hwRatio = 1.0;
   if ( !context.renderContext().forceVectorOutput() && !rotated )
   {
-    usePict = false;
     QImage img = QgsApplication::svgCache()->svgAsImage( path, size, fillColor, strokeColor, strokeWidth,
                  context.renderContext().scaleFactor(), fitsInCache, aspectRatio );
     if ( fitsInCache && img.width() > 1 )
     {
+      usePict = false;
       //consider transparency
       if ( !qgsDoubleNear( context.opacity(), 1.0 ) )
       {
@@ -2301,7 +2310,7 @@ void QgsSvgMarkerSymbolLayer::writeSldMarker( QDomDocument &doc, QDomElement &el
 
 QgsSymbolLayer *QgsSvgMarkerSymbolLayer::createFromSld( QDomElement &element )
 {
-  QgsDebugMsg( "Entered." );
+  QgsDebugMsg( QStringLiteral( "Entered." ) );
 
   QDomElement graphicElem = element.firstChildElement( QStringLiteral( "Graphic" ) );
   if ( graphicElem.isNull() )
@@ -2345,9 +2354,6 @@ QgsSymbolLayer *QgsSvgMarkerSymbolLayer::createFromSld( QDomElement &element )
 
 bool QgsSvgMarkerSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFactor, const QString &layerName, QgsSymbolRenderContext &context, QPointF shift ) const
 {
-  Q_UNUSED( layerName );
-  Q_UNUSED( shift ); //todo...
-
   //size
   double size = mSize;
 
@@ -2377,8 +2383,6 @@ bool QgsSvgMarkerSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFa
     size *= mmMapUnitScaleFactor;
   }
 
-  double halfSize = size / 2.0;
-
   //offset, angle
   QPointF offset = mOffset;
 
@@ -2400,7 +2404,7 @@ bool QgsSvgMarkerSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFa
     context.setOriginalValueVariable( mAngle );
     angle = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyAngle, context.renderContext().expressionContext(), mAngle ) + mLineAngle;
   }
-  //angle = -angle; //rotation in Qt is counterclockwise
+
   if ( angle )
     outputOffset = _rotatedOffset( outputOffset, angle );
 
@@ -2439,17 +2443,15 @@ bool QgsSvgMarkerSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFa
   const QByteArray &svgContent = QgsApplication::svgCache()->svgContent( path, size, fillColor, strokeColor, strokeWidth,
                                  context.renderContext().scaleFactor(), mFixedAspectRatio );
 
-  //if current entry image is 0: cache image for entry
-  // checks to see if image will fit into cache
-  //update stats for memory usage
   QSvgRenderer r( svgContent );
   if ( !r.isValid() )
-  {
     return false;
-  }
 
   QgsDxfPaintDevice pd( &e );
   pd.setDrawingSize( QSizeF( r.defaultSize() ) );
+
+  QSizeF outSize( r.defaultSize() );
+  outSize.scale( size, size, Qt::KeepAspectRatio );
 
   QPainter p;
   p.begin( &pd );
@@ -2460,7 +2462,7 @@ bool QgsSvgMarkerSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFa
     p.translate( -r.defaultSize().width() / 2.0, -r.defaultSize().height() / 2.0 );
   }
   pd.setShift( shift + QPointF( outputOffset.x(), -outputOffset.y() ) );
-  pd.setOutputSize( QRectF( -halfSize, -halfSize, size, size ) );
+  pd.setOutputSize( QRectF( -outSize.width() / 2.0, -outSize.height() / 2.0, outSize.width(), outSize.height() ) );
   pd.setLayer( layerName );
   r.render( &p );
   p.end();
@@ -2940,7 +2942,7 @@ QRectF QgsFontMarkerSymbolLayer::bounds( QPointF point, QgsSymbolRenderContext &
 
 QgsSymbolLayer *QgsFontMarkerSymbolLayer::createFromSld( QDomElement &element )
 {
-  QgsDebugMsg( "Entered." );
+  QgsDebugMsg( QStringLiteral( "Entered." ) );
 
   QDomElement graphicElem = element.firstChildElement( QStringLiteral( "Graphic" ) );
   if ( graphicElem.isNull() )

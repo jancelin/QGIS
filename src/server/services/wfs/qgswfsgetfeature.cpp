@@ -22,6 +22,9 @@
 #include "qgswfsutils.h"
 #include "qgsserverprojectutils.h"
 #include "qgsfields.h"
+#include "qgsfieldformatterregistry.h"
+#include "qgsfieldformatter.h"
+#include "qgsdatetimefieldformatter.h"
 #include "qgsexpression.h"
 #include "qgsgeometry.h"
 #include "qgsmaplayer.h"
@@ -61,6 +64,8 @@ namespace QgsWfs
     };
 
     QString createFeatureGeoJSON( QgsFeature *feat, const createFeatureParams &params );
+
+    QString encodeValueToText( const QVariant &value, const QgsEditorWidgetSetup &setup );
 
     QDomElement createFeatureGML2( QgsFeature *feat, QDomDocument &doc, const createFeatureParams &params, const QgsProject *project );
 
@@ -673,16 +678,13 @@ namespace QgsWfs
           {
             if ( filter->hasParserError() )
             {
-              QgsMessageLog::logMessage( filter->parserErrorString() );
+              throw QgsRequestNotWellFormedException( QStringLiteral( "The EXP_FILTER expression has errors: %1" ).arg( filter->parserErrorString() ) );
             }
-            else
+            if ( filter->needsGeometry() )
             {
-              if ( filter->needsGeometry() )
-              {
-                query.featureRequest.setFlags( QgsFeatureRequest::NoFlags );
-              }
-              query.featureRequest.setFilterExpression( filter->expression() );
+              query.featureRequest.setFlags( QgsFeatureRequest::NoFlags );
             }
+            query.featureRequest.setFilterExpression( filter->expression() );
           }
         }
       }
@@ -941,6 +943,22 @@ namespace QgsWfs
 
   namespace
   {
+    static QSet< QString > sParamFilter
+    {
+      QStringLiteral( "REQUEST" ),
+      QStringLiteral( "FORMAT" ),
+      QStringLiteral( "OUTPUTFORMAT" ),
+      QStringLiteral( "BBOX" ),
+      QStringLiteral( "FEATUREID" ),
+      QStringLiteral( "TYPENAME" ),
+      QStringLiteral( "FILTER" ),
+      QStringLiteral( "EXP_FILTER" ),
+      QStringLiteral( "MAXFEATURES" ),
+      QStringLiteral( "STARTINDEX" ),
+      QStringLiteral( "PROPERTYNAME" ),
+      QStringLiteral( "_DC" )
+    };
+
 
     void hitGetFeature( const QgsServerRequest &request, QgsServerResponse &response, const QgsProject *project, QgsWfsParameters::Format format,
                         int numberOfFeatures, const QStringList &typeNames )
@@ -978,18 +996,11 @@ namespace QgsWfs
         else
           query.addQueryItem( QStringLiteral( "VERSION" ), QStringLiteral( "1.0.0" ) );
 
-        query.removeAllQueryItems( QStringLiteral( "REQUEST" ) );
-        query.removeAllQueryItems( QStringLiteral( "FORMAT" ) );
-        query.removeAllQueryItems( QStringLiteral( "OUTPUTFORMAT" ) );
-        query.removeAllQueryItems( QStringLiteral( "BBOX" ) );
-        query.removeAllQueryItems( QStringLiteral( "FEATUREID" ) );
-        query.removeAllQueryItems( QStringLiteral( "TYPENAME" ) );
-        query.removeAllQueryItems( QStringLiteral( "FILTER" ) );
-        query.removeAllQueryItems( QStringLiteral( "EXP_FILTER" ) );
-        query.removeAllQueryItems( QStringLiteral( "MAXFEATURES" ) );
-        query.removeAllQueryItems( QStringLiteral( "STARTINDEX" ) );
-        query.removeAllQueryItems( QStringLiteral( "PROPERTYNAME" ) );
-        query.removeAllQueryItems( QStringLiteral( "_DC" ) );
+        for ( auto param : query.queryItems() )
+        {
+          if ( sParamFilter.contains( param.first.toUpper() ) )
+            query.removeAllQueryItems( param.first );
+        }
 
         query.addQueryItem( QStringLiteral( "REQUEST" ), QStringLiteral( "DescribeFeatureType" ) );
         query.addQueryItem( QStringLiteral( "TYPENAME" ), typeNames.join( ',' ) );
@@ -1087,18 +1098,11 @@ namespace QgsWfs
         else
           query.addQueryItem( QStringLiteral( "VERSION" ), QStringLiteral( "1.0.0" ) );
 
-        query.removeAllQueryItems( QStringLiteral( "REQUEST" ) );
-        query.removeAllQueryItems( QStringLiteral( "FORMAT" ) );
-        query.removeAllQueryItems( QStringLiteral( "OUTPUTFORMAT" ) );
-        query.removeAllQueryItems( QStringLiteral( "BBOX" ) );
-        query.removeAllQueryItems( QStringLiteral( "FEATUREID" ) );
-        query.removeAllQueryItems( QStringLiteral( "TYPENAME" ) );
-        query.removeAllQueryItems( QStringLiteral( "FILTER" ) );
-        query.removeAllQueryItems( QStringLiteral( "EXP_FILTER" ) );
-        query.removeAllQueryItems( QStringLiteral( "MAXFEATURES" ) );
-        query.removeAllQueryItems( QStringLiteral( "STARTINDEX" ) );
-        query.removeAllQueryItems( QStringLiteral( "PROPERTYNAME" ) );
-        query.removeAllQueryItems( QStringLiteral( "_DC" ) );
+        for ( auto param : query.queryItems() )
+        {
+          if ( sParamFilter.contains( param.first.toUpper() ) )
+            query.removeAllQueryItems( param.first );
+        }
 
         query.addQueryItem( QStringLiteral( "REQUEST" ), QStringLiteral( "DescribeFeatureType" ) );
         query.addQueryItem( QStringLiteral( "TYPENAME" ), typeNames.join( ',' ) );
@@ -1263,7 +1267,7 @@ namespace QgsWfs
 
       //add geometry column (as gml)
       QgsGeometry geom = feat->geometry();
-      if ( geom && params.withGeom && params.geometryName != QLatin1String( "NONE" ) )
+      if ( !geom.isNull() && params.withGeom && params.geometryName != QLatin1String( "NONE" ) )
       {
         int prec = params.precision;
         QgsCoordinateReferenceSystem crs = params.crs;
@@ -1335,10 +1339,16 @@ namespace QgsWfs
         {
           continue;
         }
-        QString attributeName = fields.at( idx ).name();
+        const QgsField field = fields.at( idx );
+        const QgsEditorWidgetSetup setup = field.editorWidgetSetup();
+        QString attributeName = field.name();
 
         QDomElement fieldElem = doc.createElement( "qgs:" + attributeName.replace( ' ', '_' ).replace( cleanTagNameRegExp, QString() ) );
-        QDomText fieldText = doc.createTextNode( featureAttributes[idx].toString() );
+        QDomText fieldText = doc.createTextNode( encodeValueToText( featureAttributes[idx], setup ) );
+        if ( featureAttributes[idx].isNull() )
+        {
+          fieldElem.setAttribute( QStringLiteral( "xsi:nil" ), QStringLiteral( "true" ) );
+        }
         fieldElem.appendChild( fieldText );
         typeNameElement.appendChild( fieldElem );
       }
@@ -1358,7 +1368,7 @@ namespace QgsWfs
 
       //add geometry column (as gml)
       QgsGeometry geom = feat->geometry();
-      if ( geom && params.withGeom && params.geometryName != QLatin1String( "NONE" ) )
+      if ( !geom.isNull() && params.withGeom && params.geometryName != QLatin1String( "NONE" ) )
       {
         int prec = params.precision;
         QgsCoordinateReferenceSystem crs = params.crs;
@@ -1430,10 +1440,18 @@ namespace QgsWfs
         {
           continue;
         }
-        QString attributeName = fields.at( idx ).name();
+
+        const QgsField field = fields.at( idx );
+        const QgsEditorWidgetSetup setup = field.editorWidgetSetup();
+
+        QString attributeName = field.name();
 
         QDomElement fieldElem = doc.createElement( "qgs:" + attributeName.replace( ' ', '_' ).replace( cleanTagNameRegExp, QString() ) );
-        QDomText fieldText = doc.createTextNode( featureAttributes[idx].toString() );
+        QDomText fieldText = doc.createTextNode( encodeValueToText( featureAttributes[idx], setup ) );
+        if ( featureAttributes[idx].isNull() )
+        {
+          fieldElem.setAttribute( QStringLiteral( "xsi:nil" ), QStringLiteral( "true" ) );
+        }
         fieldElem.appendChild( fieldText );
         typeNameElement.appendChild( fieldElem );
       }
@@ -1441,12 +1459,79 @@ namespace QgsWfs
       return featureElement;
     }
 
+    QString encodeValueToText( const QVariant &value, const QgsEditorWidgetSetup &setup )
+    {
+      if ( value.isNull() )
+        return QString();
 
+      if ( setup.type() ==  QStringLiteral( "DateTime" ) )
+      {
+        QgsDateTimeFieldFormatter fieldFormatter;
+        const QVariantMap config = setup.config();
+        const QString fieldFormat = config.value( QStringLiteral( "field_format" ), fieldFormatter.defaultFormat( value.type() ) ).toString();
+        QDateTime date = value.toDateTime();
+
+        if ( date.isValid() )
+        {
+          return date.toString( fieldFormat );
+        }
+      }
+      else if ( setup.type() ==  QStringLiteral( "Range" ) )
+      {
+        const QVariantMap config = setup.config();
+        if ( config.contains( QStringLiteral( "Precision" ) ) )
+        {
+          // if precision is defined, use it
+          bool ok;
+          int precision( config[ QStringLiteral( "Precision" ) ].toInt( &ok ) );
+          if ( ok )
+            return QString::number( value.toDouble(), 'f', precision );
+        }
+      }
+
+      switch ( value.type() )
+      {
+        case QVariant::Int:
+        case QVariant::UInt:
+        case QVariant::LongLong:
+        case QVariant::ULongLong:
+        case QVariant::Double:
+          return value.toString();
+
+        case QVariant::Bool:
+          return value.toBool() ? QStringLiteral( "true" ) : QStringLiteral( "false" );
+
+        case QVariant::StringList:
+        case QVariant::List:
+        case QVariant::Map:
+        {
+          QString v = QgsJsonUtils::encodeValue( value );
+
+          //do we need CDATA
+          if ( v.indexOf( '<' ) != -1 || v.indexOf( '&' ) != -1 )
+            v.prepend( QStringLiteral( "<![CDATA[" ) ).append( QStringLiteral( "]]>" ) );
+
+          return v;
+        }
+
+        default:
+        case QVariant::String:
+        {
+          QString v = value.toString();
+
+          //do we need CDATA
+          if ( v.indexOf( '<' ) != -1 || v.indexOf( '&' ) != -1 )
+            v.prepend( QStringLiteral( "<![CDATA[" ) ).append( QStringLiteral( "]]>" ) );
+
+          return v;
+        }
+      }
+    }
 
 
   } // namespace
 
-} // samespace QgsWfs
+} // namespace QgsWfs
 
 
 

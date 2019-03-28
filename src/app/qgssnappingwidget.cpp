@@ -201,7 +201,10 @@ QgsSnappingWidget::QgsSnappingWidget( QgsProject *project, QgsMapCanvas *canvas,
   mTracingOffsetSpinBox->setRange( -1000000, 1000000 );
   mTracingOffsetSpinBox->setDecimals( 6 );
   mTracingOffsetSpinBox->setClearValue( 0 );
-  mTracingOffsetSpinBox->setClearValueMode( QgsDoubleSpinBox::CustomValue );
+  mTracingOffsetSpinBox->setClearValueMode( QgsDoubleSpinBox::ClearValueMode::CustomValue );
+  // Note: set to false to "fix" a crash
+  // See https://github.com/qgis/QGIS/pull/8266 for some more context
+  mTracingOffsetSpinBox->setShowClearButton( false );
   QMenu *tracingMenu = new QMenu( this );
   QWidgetAction *widgetAction = new QWidgetAction( tracingMenu );
   QVBoxLayout *tracingWidgetLayout = new QVBoxLayout;
@@ -347,14 +350,14 @@ void QgsSnappingWidget::projectSnapSettingsChanged()
     mTypeButton->setDefaultAction( mSegmentAction );
   }
 
-  if ( mToleranceSpinBox->value() != config.tolerance() )
-  {
-    mToleranceSpinBox->setValue( config.tolerance() );
-  }
-
   if ( static_cast<QgsTolerance::UnitType>( mUnitsComboBox->currentData().toInt() ) != config.units() )
   {
     mUnitsComboBox->setCurrentIndex( mUnitsComboBox->findData( config.units() ) );
+  }
+
+  if ( mToleranceSpinBox->value() != config.tolerance() )
+  {
+    mToleranceSpinBox->setValue( config.tolerance() );
   }
 
   if ( config.intersectionSnapping() != mIntersectionSnappingAction->isChecked() )
@@ -545,7 +548,7 @@ void QgsSnappingWidget::cleanGroup( QgsLayerTreeNode *node )
   QList<QgsLayerTreeNode *> toRemove;
   Q_FOREACH ( QgsLayerTreeNode *child, node->children() )
   {
-    if ( QgsLayerTree::isLayer( child ) && QgsLayerTree::toLayer( child )->layer()->type() != QgsMapLayer::VectorLayer )
+    if ( QgsLayerTree::isLayer( child ) && ( !QgsLayerTree::toLayer( child )->layer() || QgsLayerTree::toLayer( child )->layer()->type() != QgsMapLayer::VectorLayer ) )
     {
       toRemove << child;
       continue;

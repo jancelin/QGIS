@@ -24,6 +24,8 @@
 #include "qgsrasterlayer.h"
 #include "qgsgeopackagedataitems.h"
 #include "qgsogrutils.h"
+#include "qgsproviderregistry.h"
+#include "symbology/qgsstyle.h"
 
 #include <QFileInfo>
 #include <QTextStream>
@@ -44,7 +46,6 @@ QGISEXTERN QStringList wildcards();
 
 QGISEXTERN bool deleteLayer( const QString &uri, const QString &errCause );
 
-
 QgsOgrLayerItem::QgsOgrLayerItem( QgsDataItem *parent,
                                   const QString &name, const QString &path, const QString &uri, LayerType layerType, bool isSubLayer )
   : QgsLayerItem( parent, name, path, uri, layerType, QStringLiteral( "ogr" ) )
@@ -52,30 +53,11 @@ QgsOgrLayerItem::QgsOgrLayerItem( QgsDataItem *parent,
   mIsSubLayer = isSubLayer;
   mToolTip = uri;
   setState( Populated ); // children are not expected
-
-  if ( mPath.endsWith( QLatin1String( ".shp" ), Qt::CaseInsensitive ) )
-  {
-    if ( OGRGetDriverCount() == 0 )
-    {
-      OGRRegisterAll();
-    }
-    gdal::dataset_unique_ptr hDataSource( GDALOpenEx( mPath.toUtf8().constData(), GDAL_OF_VECTOR | GDAL_OF_UPDATE, nullptr, nullptr, nullptr ) );
-    if ( hDataSource )
-    {
-      mCapabilities |= SetCrs;
-    }
-
-    // It it is impossible to assign a crs to an existing layer
-    // No OGR_L_SetSpatialRef : http://trac.osgeo.org/gdal/ticket/4032
-  }
 }
 
 
 bool QgsOgrLayerItem::setCrs( const QgsCoordinateReferenceSystem &crs )
 {
-  if ( !( mCapabilities & SetCrs ) )
-    return false;
-
   QString layerName = mPath.left( mPath.indexOf( QLatin1String( ".shp" ), Qt::CaseInsensitive ) );
   QString wkt = crs.toWkt();
 
@@ -273,7 +255,7 @@ QList<QgsOgrDbLayerInfo *> QgsOgrLayerItem::subLayers( const QString &path, cons
 
     if ( ! hDS )
     {
-      QgsDebugMsg( QString( "GDALOpen error # %1 : %2 " ).arg( CPLGetLastErrorNo() ).arg( CPLGetLastErrorMsg() ) );
+      QgsDebugMsg( QStringLiteral( "GDALOpen error # %1 : %2 " ).arg( CPLGetLastErrorNo() ).arg( CPLGetLastErrorMsg() ) );
 
     }
     else
@@ -310,24 +292,36 @@ QString QgsOgrLayerItem::layerName() const
 #ifdef HAVE_GUI
 QList<QAction *> QgsOgrLayerItem::actions( QWidget *parent )
 {
-  QList<QAction *> lst;
+  QList<QAction *> lst = QgsLayerItem::actions( parent );
+
   // Messages are different for files and tables
-  QString message = mIsSubLayer ? QObject::tr( "Delete Layer '%1'…" ).arg( mName ) : QObject::tr( "Delete File '%1'…" ).arg( mUri );
+  QString message = mIsSubLayer ? QObject::tr( "Delete Layer “%1”…" ).arg( mName ) : QObject::tr( "Delete File “%1”…" ).arg( mName );
   QAction *actionDeleteLayer = new QAction( message, parent );
-  connect( actionDeleteLayer, &QAction::triggered, this, &QgsOgrLayerItem::deleteLayer );
+
+  // IMPORTANT - we need to capture the stuff we need, and then hand the slot
+  // off to a static method. This is because it's possible for this item
+  // to be deleted in the background on us (e.g. by a parent directory refresh)
+  const bool isSubLayer = mIsSubLayer;
+  const QString uri = mUri;
+  const QString name = mName;
+  QPointer< QgsDataItem > parentItem( mParent );
+  connect( actionDeleteLayer, &QAction::triggered, this, [ isSubLayer, uri, name, parentItem ]
+  {
+    deleteLayer( isSubLayer, uri, name, parentItem );
+  } );
   lst.append( actionDeleteLayer );
   return lst;
 }
 
-void QgsOgrLayerItem::deleteLayer()
+void QgsOgrLayerItem::deleteLayer( const bool isSubLayer, const QString &uri, const QString &name, QPointer< QgsDataItem > parent )
 {
   // Messages are different for files and tables
-  QString title = mIsSubLayer ? QObject::tr( "Delete Layer" ) : QObject::tr( "Delete File" );
+  QString title = isSubLayer ? QObject::tr( "Delete Layer" ) : QObject::tr( "Delete File" );
   // Check if the layer is in the registry
   const QgsMapLayer *projectLayer = nullptr;
   Q_FOREACH ( const QgsMapLayer *layer, QgsProject::instance()->mapLayers() )
   {
-    if ( layer->publicSource() == mUri )
+    if ( layer->publicSource() == uri )
     {
       projectLayer = layer;
     }
@@ -335,13 +329,13 @@ void QgsOgrLayerItem::deleteLayer()
   if ( ! projectLayer )
   {
     QString confirmMessage;
-    if ( mIsSubLayer )
+    if ( isSubLayer )
     {
-      confirmMessage = QObject::tr( "Are you sure you want to delete layer '%1' from datasource?" ).arg( mName );
+      confirmMessage = QObject::tr( "Are you sure you want to delete layer '%1' from datasource?" ).arg( name );
     }
     else
     {
-      confirmMessage = QObject::tr( "Are you sure you want to delete file '%1'?" ).arg( mUri );
+      confirmMessage = QObject::tr( "Are you sure you want to delete file '%1'?" ).arg( uri );
     }
     if ( QMessageBox::question( nullptr, title,
                                 confirmMessage,
@@ -349,22 +343,22 @@ void QgsOgrLayerItem::deleteLayer()
       return;
 
     QString errCause;
-    bool res = ::deleteLayer( mUri, errCause );
+    bool res = ::deleteLayer( uri, errCause );
     if ( !res )
     {
       QMessageBox::warning( nullptr, title, errCause );
     }
     else
     {
-      QMessageBox::information( nullptr, title, mIsSubLayer ? tr( "Layer deleted successfully." ) :  tr( "File deleted successfully." ) );
-      if ( mParent )
-        mParent->refresh();
+      QMessageBox::information( nullptr, title, isSubLayer ? tr( "Layer deleted successfully." ) :  tr( "File deleted successfully." ) );
+      if ( parent )
+        parent->refresh();
     }
   }
   else
   {
     QMessageBox::warning( nullptr, title, QObject::tr( "The layer '%1' cannot be deleted because it is in the current project as '%2',"
-                          " remove it from the project and retry." ).arg( mName, projectLayer->name() ) );
+                          " remove it from the project and retry." ).arg( name, projectLayer->name() ) );
   }
 }
 #endif
@@ -400,7 +394,7 @@ static QgsOgrLayerItem *dataItemForLayer( QgsDataItem *parentItem, QString name,
       break;
   }
 
-  QgsDebugMsgLevel( QString( "ogrType = %1 layertype = %2" ).arg( ogrType ).arg( layerType ), 2 );
+  QgsDebugMsgLevel( QStringLiteral( "ogrType = %1 layertype = %2" ).arg( ogrType ).arg( layerType ), 2 );
 
   QString layerUri = path;
 
@@ -478,7 +472,7 @@ bool QgsOgrDataCollectionItem::storeConnection( const QString &path, const QStri
     while ( ok && ! QgsOgrDbConnection( connName, ogrDriverName ).path( ).isEmpty( ) )
     {
 
-      connName = QInputDialog::getText( nullptr, tr( "Cannot add connection '%1'" ).arg( connName ),
+      connName = QInputDialog::getText( nullptr, tr( "Add Connection" ),
                                         tr( "A connection with the same name already exists,\nplease provide a new name:" ), QLineEdit::Normal,
                                         QString(), &ok );
     }
@@ -499,9 +493,87 @@ bool QgsOgrDataCollectionItem::createConnection( const QString &name, const QStr
   return storeConnection( path, ogrDriverName );
 }
 
+#ifdef HAVE_GUI
+QList<QAction *> QgsOgrDataCollectionItem::actions( QWidget *parent )
+{
+  QList<QAction *> lst = QgsDataCollectionItem::actions( parent );
+
+  const bool isFolder = QFileInfo( mPath ).isDir();
+  // Messages are different for files and tables
+  QString message = QObject::tr( "Delete %1 “%2”…" ).arg( isFolder ? tr( "Folder" ) : tr( "File" ), mName );
+  QAction *actionDeleteLayer = new QAction( message, parent );
+
+  // IMPORTANT - we need to capture the stuff we need, and then hand the slot
+  // off to a static method. This is because it's possible for this item
+  // to be deleted in the background on us (e.g. by a parent directory refresh)
+  const QString path = mPath;
+  QPointer< QgsDataItem > parentItem( mParent );
+  connect( actionDeleteLayer, &QAction::triggered, this, [ path, parentItem ]
+  {
+    deleteCollection( path, parentItem );
+  } );
+  lst.append( actionDeleteLayer );
+
+  return lst;
+}
+
+void QgsOgrDataCollectionItem::deleteCollection( const QString &path, QPointer<QgsDataItem> parent )
+{
+  const bool isFolder = QFileInfo( path ).isDir();
+  const QString type = isFolder ? tr( "folder" ) : tr( "file" );
+  const QString typeCaps = isFolder ? tr( "Folder" ) : tr( "File" );
+  const QString title = QObject::tr( "Delete %1" ).arg( type );
+  // Check if the layer is in the project
+  const QgsMapLayer *projectLayer = nullptr;
+  const auto mapLayers = QgsProject::instance()->mapLayers();
+  for ( auto it = mapLayers.constBegin(); it != mapLayers.constEnd(); ++it )
+  {
+    const QVariantMap parts = QgsProviderRegistry::instance()->decodeUri( it.value()->dataProvider()->name(), it.value()->source() );
+    if ( parts.value( QStringLiteral( "path" ) ).toString() == path )
+    {
+      projectLayer = it.value();
+    }
+  }
+  if ( ! projectLayer )
+  {
+    const QString confirmMessage = QObject::tr( "Are you sure you want to delete '%1'?" ).arg( path );
+
+    if ( QMessageBox::question( nullptr, title,
+                                confirmMessage,
+                                QMessageBox::Yes | QMessageBox::No, QMessageBox::No ) != QMessageBox::Yes )
+      return;
+
+    bool res = false;
+    if ( isFolder )
+    {
+      // e.g. the abomination which is gdb
+      QDir dir( path );
+      res = dir.removeRecursively();
+    }
+    else
+    {
+      res = QFile::remove( path );
+    }
+    if ( !res )
+    {
+      QMessageBox::warning( nullptr, title, tr( "Could not delete %1." ).arg( type ) );
+    }
+    else
+    {
+      QMessageBox::information( nullptr, title, tr( "%1 deleted successfully." ).arg( typeCaps ) );
+      if ( parent )
+        parent->refresh();
+    }
+  }
+  else
+  {
+    QMessageBox::warning( nullptr, title, QObject::tr( "The %1 '%2' cannot be deleted because it is in the current project as '%3',"
+                          " remove it from the project and retry." ).arg( type, path, projectLayer->name() ) );
+  }
+}
+#endif
 
 // ---------------------------------------------------------------------------
-
 
 QgsDataItem *QgsOgrDataItemProvider::createDataItem( const QString &pathIn, QgsDataItem *parentItem )
 {
@@ -577,6 +649,11 @@ QgsDataItem *QgsOgrDataItemProvider::createDataItem( const QString &pathIn, QgsD
        !myExtensions.contains( QStringLiteral( "tif.xml" ) ) )
     return nullptr;
 
+  // skip QGIS style xml files
+  if ( path.endsWith( QLatin1String( ".xml" ), Qt::CaseInsensitive ) &&
+       QgsStyle::isXmlStyleFile( path ) )
+    return nullptr;
+
   // We have to filter by extensions, otherwise e.g. all Shapefile files are displayed
   // because OGR drive can open also .dbf, .shx.
   if ( myExtensions.indexOf( suffix ) < 0 && !dirExtensions.contains( suffix ) )
@@ -628,17 +705,29 @@ QgsDataItem *QgsOgrDataItemProvider::createDataItem( const QString &pathIn, QgsD
   //       with the companion variable (same name) in the gdal provider
   //       class
   // TODO: add more OGR supported multiple layers formats here!
-  QStringList ogrSupportedDbLayersExtensions;
-  ogrSupportedDbLayersExtensions << QStringLiteral( "gpkg" ) << QStringLiteral( "sqlite" ) << QStringLiteral( "db" ) << QStringLiteral( "gdb" ) << QStringLiteral( "kml" );
-  QStringList ogrSupportedDbDriverNames;
-  ogrSupportedDbDriverNames << QStringLiteral( "GPKG" ) << QStringLiteral( "db" ) << QStringLiteral( "gdb" );
+  static QStringList sOgrSupportedDbLayersExtensions { QStringLiteral( "gpkg" ),
+      QStringLiteral( "sqlite" ),
+      QStringLiteral( "db" ),
+      QStringLiteral( "gdb" ),
+      QStringLiteral( "kml" ) };
+  static QStringList sOgrSupportedDbDriverNames { QStringLiteral( "GPKG" ),
+      QStringLiteral( "db" ),
+      QStringLiteral( "gdb" ) };
+
+  // these extensions are trivial to read, so there's no need to rely on
+  // the extension only scan here -- avoiding it always gives us the correct data type
+  // and sublayer visiblity
+  static QStringList sSkipFastTrackExtensions { QStringLiteral( "xlsx" ),
+      QStringLiteral( "ods" ),
+      QStringLiteral( "csv" ),
+      QStringLiteral( "nc" ) };
 
   // Fast track: return item without testing if:
   // scanExtSetting or zipfile and scan zip == "Basic scan"
   // netCDF files can be both raster or vector, so fallback to opening
   if ( ( scanExtSetting ||
          ( ( is_vsizip || is_vsitar ) && scanZipSetting == QLatin1String( "basic" ) ) ) &&
-       suffix != QLatin1String( "nc" ) )
+       !sSkipFastTrackExtensions.contains( suffix ) )
   {
     // if this is a VRT file make sure it is vector VRT to avoid duplicates
     if ( suffix == QLatin1String( "vrt" ) )
@@ -649,14 +738,14 @@ QgsDataItem *QgsOgrDataItemProvider::createDataItem( const QString &pathIn, QgsD
       CPLPopErrorHandler();
       if ( !hDriver || GDALGetDriverShortName( hDriver ) == QLatin1String( "VRT" ) )
       {
-        QgsDebugMsgLevel( "Skipping VRT file because root is not a OGR VRT", 2 );
+        QgsDebugMsgLevel( QStringLiteral( "Skipping VRT file because root is not a OGR VRT" ), 2 );
         return nullptr;
       }
     }
     // Handle collections
     // Check if the layer has sublayers by comparing the extension
     QgsDataItem *item = nullptr;
-    if ( ! ogrSupportedDbLayersExtensions.contains( suffix ) )
+    if ( ! sOgrSupportedDbLayersExtensions.contains( suffix ) )
     {
       item = new QgsOgrLayerItem( parentItem, name, path, path, QgsLayerItem::Vector );
     }
@@ -689,13 +778,13 @@ QgsDataItem *QgsOgrDataItemProvider::createDataItem( const QString &pathIn, QgsD
 
   if ( ! hDS )
   {
-    QgsDebugMsg( QString( "GDALOpen error # %1 : %2 on %3" ).arg( CPLGetLastErrorNo() ).arg( CPLGetLastErrorMsg() ).arg( path ) );
+    QgsDebugMsg( QStringLiteral( "GDALOpen error # %1 : %2 on %3" ).arg( CPLGetLastErrorNo() ).arg( CPLGetLastErrorMsg() ).arg( path ) );
     return nullptr;
   }
 
   GDALDriverH hDriver = GDALGetDatasetDriver( hDS.get() );
   QString driverName = GDALGetDriverShortName( hDriver );
-  QgsDebugMsgLevel( QString( "GDAL Driver : %1" ).arg( driverName ), 2 );
+  QgsDebugMsgLevel( QStringLiteral( "GDAL Driver : %1" ).arg( driverName ), 2 );
   int numLayers = GDALDatasetGetLayerCount( hDS.get() );
 
   // GeoPackage needs a specialized data item, mainly because of raster deletion not
@@ -704,7 +793,7 @@ QgsDataItem *QgsOgrDataItemProvider::createDataItem( const QString &pathIn, QgsD
   {
     item = new QgsGeoPackageCollectionItem( parentItem, name, path );
   }
-  else if ( numLayers > 1 || ogrSupportedDbDriverNames.contains( driverName ) )
+  else if ( numLayers > 1 || sOgrSupportedDbDriverNames.contains( driverName ) )
   {
     item = new QgsOgrDataCollectionItem( parentItem, name, path );
   }

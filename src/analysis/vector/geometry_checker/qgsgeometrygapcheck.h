@@ -19,6 +19,8 @@
 #define QGS_GEOMETRY_GAP_CHECK_H
 
 #include "qgsgeometrycheck.h"
+#include "qgsgeometrycheckerror.h"
+#include "qgsfeatureid.h"
 
 class ANALYSIS_EXPORT QgsGeometryGapCheckError : public QgsGeometryCheckError
 {
@@ -29,43 +31,26 @@ class ANALYSIS_EXPORT QgsGeometryGapCheckError : public QgsGeometryCheckError
                               const QMap<QString, QgsFeatureIds> &neighbors,
                               double area,
                               const QgsRectangle &gapAreaBBox )
-      : QgsGeometryCheckError( check, layerId, FEATUREID_NULL, geometry, geometry.constGet()->centroid(), QgsVertexId(), area, ValueArea )
+      : QgsGeometryCheckError( check, layerId, FID_NULL, geometry, geometry.constGet()->centroid(), QgsVertexId(), area, ValueArea )
       , mNeighbors( neighbors )
       , mGapAreaBBox( gapAreaBBox )
     {
     }
     const QMap<QString, QgsFeatureIds> &neighbors() const { return mNeighbors; }
 
-    bool isEqual( QgsGeometryCheckError *other ) const override
-    {
-      QgsGeometryGapCheckError *err = dynamic_cast<QgsGeometryGapCheckError *>( other );
-      return err && QgsGeometryCheckerUtils::pointsFuzzyEqual( err->location(), location(), mCheck->context()->reducedTolerance ) && err->neighbors() == neighbors();
-    }
+    bool isEqual( QgsGeometryCheckError *other ) const override;
 
-    bool closeMatch( QgsGeometryCheckError *other ) const override
-    {
-      QgsGeometryGapCheckError *err = dynamic_cast<QgsGeometryGapCheckError *>( other );
-      return err && err->layerId() == layerId() && err->neighbors() == neighbors();
-    }
+    bool closeMatch( QgsGeometryCheckError *other ) const override;
 
-    void update( const QgsGeometryCheckError *other ) override
-    {
-      QgsGeometryCheckError::update( other );
-      // Static cast since this should only get called if isEqual == true
-      const QgsGeometryGapCheckError *err = static_cast<const QgsGeometryGapCheckError *>( other );
-      mNeighbors = err->mNeighbors;
-      mGapAreaBBox = err->mGapAreaBBox;
-    }
+    void update( const QgsGeometryCheckError *other ) override;
 
-    bool handleChanges( const QgsGeometryCheck::Changes & /*changes*/ ) override
-    {
-      return true;
-    }
+    bool handleChanges( const QgsGeometryCheck::Changes & /*changes*/ ) override;
 
-    QgsRectangle affectedAreaBBox() const override
-    {
-      return mGapAreaBBox;
-    }
+    QgsRectangle affectedAreaBBox() const override;
+
+    QMap<QString, QgsFeatureIds > involvedFeatures() const override;
+
+    QIcon icon() const override;
 
   private:
     QMap<QString, QgsFeatureIds> mNeighbors;
@@ -74,24 +59,48 @@ class ANALYSIS_EXPORT QgsGeometryGapCheckError : public QgsGeometryCheckError
 
 class ANALYSIS_EXPORT QgsGeometryGapCheck : public QgsGeometryCheck
 {
+    Q_GADGET
   public:
-    QgsGeometryGapCheck( QgsGeometryCheckerContext *context, double thresholdMapUnits )
-      : QgsGeometryCheck( LayerCheck, {QgsWkbTypes::PolygonGeometry}, context )
-    , mThresholdMapUnits( thresholdMapUnits )
-    {}
-    void collectErrors( QList<QgsGeometryCheckError *> &errors, QStringList &messages, QAtomicInt *progressCounter = nullptr, const QMap<QString, QgsFeatureIds> &ids = QMap<QString, QgsFeatureIds>() ) const override;
-    void fixError( QgsGeometryCheckError *error, int method, const QMap<QString, int> &mergeAttributeIndices, Changes &changes ) const override;
-    QStringList resolutionMethods() const override;
-    QString errorDescription() const override { return tr( "Gap" ); }
-    QString errorName() const override { return QStringLiteral( "QgsGeometryGapCheck" ); }
+    //! Resolution methods for geometry gap checks
+    enum ResolutionMethod
+    {
+      MergeLongestEdge,
+      NoChange
+    };
+    Q_ENUM( ResolutionMethod )
 
-    enum ResolutionMethod { MergeLongestEdge, NoChange };
+    /**
+     * The \a configuration accepts a "gapThreshold" key which specifies
+     * the maximum gap size in squared map units. Any gaps which are larger
+     * than this area are accepted. If "gapThreshold" is set to 0, the check
+     * is disabled.
+     */
+    explicit QgsGeometryGapCheck( const QgsGeometryCheckContext *context, const QVariantMap &configuration );
+
+    QList<QgsWkbTypes::GeometryType> compatibleGeometryTypes() const override { return factoryCompatibleGeometryTypes(); }
+    void collectErrors( const QMap<QString, QgsFeaturePool *> &featurePools, QList<QgsGeometryCheckError *> &errors, QStringList &messages, QgsFeedback *feedback, const LayerFeatureIds &ids = LayerFeatureIds() ) const override;
+    void fixError( const QMap<QString, QgsFeaturePool *> &featurePools, QgsGeometryCheckError *error, int method, const QMap<QString, int> &mergeAttributeIndices, Changes &changes ) const override;
+    QStringList resolutionMethods() const override;
+
+    QString description() const override;
+    QString id() const override;
+    QgsGeometryCheck::Flags flags() const override;
+    QgsGeometryCheck::CheckType checkType() const override { return factoryCheckType(); }
+
+///@cond private
+    static QString factoryDescription() SIP_SKIP;
+    static QString factoryId() SIP_SKIP;
+    static QgsGeometryCheck::Flags factoryFlags() SIP_SKIP;
+    static QList<QgsWkbTypes::GeometryType> factoryCompatibleGeometryTypes() SIP_SKIP;
+    static bool factoryIsCompatible( QgsVectorLayer *layer ) SIP_SKIP;
+    static QgsGeometryCheck::CheckType factoryCheckType() SIP_SKIP;
+///@endcond private
 
   private:
+    bool mergeWithNeighbor( const QMap<QString, QgsFeaturePool *> &featurePools,
+                            QgsGeometryGapCheckError *err, Changes &changes, QString &errMsg ) const;
 
-    double mThresholdMapUnits;
-
-    bool mergeWithNeighbor( QgsGeometryGapCheckError *err, Changes &changes, QString &errMsg ) const;
+    const double mGapThresholdMapUnits;
 };
 
 #endif // QGS_GEOMETRY_GAP_CHECK_H

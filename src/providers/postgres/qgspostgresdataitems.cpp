@@ -499,16 +499,16 @@ QString QgsPGLayerItem::createUri()
 
   if ( !connItem )
   {
-    QgsDebugMsg( "connection item not found." );
+    QgsDebugMsg( QStringLiteral( "connection item not found." ) );
     return QString();
   }
 
   QgsDataSourceUri uri( QgsPostgresConn::connUri( connItem->name() ).connectionInfo( false ) );
   uri.setDataSource( mLayerProperty.schemaName, mLayerProperty.tableName, mLayerProperty.geometryColName, mLayerProperty.sql, pkColName );
   uri.setWkbType( mLayerProperty.types.at( 0 ) );
-  if ( uri.wkbType() != QgsWkbTypes::NoGeometry )
+  if ( uri.wkbType() != QgsWkbTypes::NoGeometry && mLayerProperty.srids.at( 0 ) != std::numeric_limits<int>::min() )
     uri.setSrid( QString::number( mLayerProperty.srids.at( 0 ) ) );
-  QgsDebugMsg( QString( "layer uri: %1" ).arg( uri.uri( false ) ) );
+  QgsDebugMsg( QStringLiteral( "layer uri: %1" ).arg( uri.uri( false ) ) );
   return uri.uri( false );
 }
 
@@ -559,7 +559,7 @@ QVector<QgsDataItem *> QgsPGSchemaItem::createChildren()
     {
       if ( dontResolveType )
       {
-        //QgsDebugMsg( QString( "skipping column %1.%2 without type constraint" ).arg( layerProperty.schemaName ).arg( layerProperty.tableName ) );
+        //QgsDebugMsg( QStringLiteral( "skipping column %1.%2 without type constraint" ).arg( layerProperty.schemaName ).arg( layerProperty.tableName ) );
         continue;
       }
 
@@ -740,7 +740,12 @@ QgsPGLayerItem *QgsPGSchemaItem::createLayer( QgsPostgresLayerProperty layerProp
     tip = tr( "Table" );
   }
   QgsWkbTypes::Type wkbType = layerProperty.types.at( 0 );
-  tip += tr( "\n%1 as %2 in %3" ).arg( layerProperty.geometryColName, QgsPostgresConn::displayStringForWkbType( wkbType ) ).arg( layerProperty.srids.at( 0 ) );
+  tip += tr( "\n%1 as %2" ).arg( layerProperty.geometryColName, QgsPostgresConn::displayStringForWkbType( wkbType ) );
+  if ( layerProperty.srids.at( 0 ) != std::numeric_limits<int>::min() )
+    tip += tr( " (srid %1)" ).arg( layerProperty.srids.at( 0 ) );
+  else
+    tip += tr( " (unknown srid)" );
+
   if ( !layerProperty.tableComment.isEmpty() )
   {
     tip = layerProperty.tableComment + '\n' + tip;

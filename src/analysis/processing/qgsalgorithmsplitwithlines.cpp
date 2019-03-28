@@ -98,14 +98,14 @@ QVariantMap QgsSplitWithLinesAlgorithm::processAlgorithm( const QVariantMap &par
 
   QString dest;
   std::unique_ptr< QgsFeatureSink > sink( parameterAsSink( parameters, QStringLiteral( "OUTPUT" ), context, dest, source->fields(),
-                                          QgsWkbTypes::multiType( source->wkbType() ),  source->sourceCrs() ) );
+                                          QgsWkbTypes::multiType( source->wkbType() ),  source->sourceCrs(), QgsFeatureSink::RegeneratePrimaryKey ) );
   if ( !sink )
     throw QgsProcessingException( invalidSinkError( parameters, QStringLiteral( "OUTPUT" ) ) );
 
   QgsSpatialIndex spatialIndex;
   QMap< QgsFeatureId, QgsGeometry > splitGeoms;
   QgsFeatureRequest request;
-  request.setSubsetOfAttributes( QgsAttributeList() );
+  request.setNoAttributes();
   request.setDestinationCrs( source->sourceCrs(), context.transformContext() );
 
   QgsFeatureIterator splitLines = linesSource->getFeatures( request );
@@ -118,7 +118,7 @@ QVariantMap QgsSplitWithLinesAlgorithm::processAlgorithm( const QVariantMap &par
     }
 
     splitGeoms.insert( aSplitFeature.id(), aSplitFeature.geometry() );
-    spatialIndex.insertFeature( aSplitFeature );
+    spatialIndex.addFeature( aSplitFeature );
   }
 
   QgsFeature outFeat;
@@ -192,7 +192,7 @@ QVariantMap QgsSplitWithLinesAlgorithm::processAlgorithm( const QVariantMap &par
             }
 
             QgsGeometry inGeom = inGeoms.takeFirst();
-            if ( !inGeom )
+            if ( inGeom.isNull() )
               continue;
 
             if ( splitGeomEngine->intersects( inGeom.constGet() ) )

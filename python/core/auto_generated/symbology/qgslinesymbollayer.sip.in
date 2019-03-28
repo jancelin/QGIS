@@ -103,7 +103,26 @@ Returns the units for lengths used in the custom dash pattern.
     void setCustomDashVector( const QVector<qreal> &vector );
 
     bool drawInsidePolygon() const;
+%Docstring
+Returns true if the line should only be drawn inside polygons, and any portion
+of the line which falls outside the polygon should be clipped away.
+
+This setting only has an effect when the line symbol is being
+used to render polygon rings.
+
+.. seealso:: :py:func:`setDrawInsidePolygon`
+%End
+
     void setDrawInsidePolygon( bool drawInsidePolygon );
+%Docstring
+Sets whether the line should only be drawn inside polygons, and any portion
+of the line which falls outside the polygon should be clipped away.
+
+This setting only has an effect when the line symbol is being
+used to render polygon rings.
+
+.. seealso:: :py:func:`drawInsidePolygon`
+%End
 
     virtual QVector<qreal> dxfCustomDashPattern( QgsUnitTypes::RenderUnit &unit ) const;
 
@@ -203,6 +222,8 @@ Create a new MarkerLineSymbolLayerV2 from SLD
     virtual void setWidth( double width );
 
     virtual double width() const;
+
+    virtual double width( const QgsRenderContext &context ) const;
 
 
     virtual double estimateMaxBleed( const QgsRenderContext &context ) const;
@@ -358,6 +379,8 @@ Returns the units for the interval between markers.
 
 
     virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const;
+
+    virtual bool hasDataDefinedProperties() const;
 
 
     virtual void setDataDefinedProperty( QgsSymbolLayer::Property key, const QgsProperty &property );

@@ -18,7 +18,9 @@
 #include "qgsgeometryrubberband.h"
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
+
 
 QgsMapToolCircularStringCurvePoint::QgsMapToolCircularStringCurvePoint( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
@@ -82,6 +84,9 @@ void QgsMapToolCircularStringCurvePoint::cadCanvasReleaseEvent( QgsMapMouseEvent
 void QgsMapToolCircularStringCurvePoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
   QgsPoint mapPoint( e->mapPoint() );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   QgsVertexId idx( 0, 0, 1 + ( mPoints.size() + 1 ) % 2 );
   if ( mTempRubberBand )
   {

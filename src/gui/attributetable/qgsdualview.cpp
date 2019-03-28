@@ -109,8 +109,6 @@ void QgsDualView::init( QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, const Qg
 
   // This slows down load of the attribute table heaps and uses loads of memory.
   //mTableView->resizeColumnsToContents();
-
-  mFeatureList->setEditSelection( QgsFeatureIds() << mFeatureListModel->idxToFid( mFeatureListModel->index( 0, 0 ) ) );
 }
 
 void QgsDualView::columnBoxInit()
@@ -654,7 +652,7 @@ void QgsDualView::organizeColumns()
     return;
   }
 
-  QgsOrganizeTableColumnsDialog dialog( mLayer, this );
+  QgsOrganizeTableColumnsDialog dialog( mLayer, attributeTableConfig(), this );
   if ( dialog.exec() == QDialog::Accepted )
   {
     QgsAttributeTableConfig config = dialog.config();
@@ -838,7 +836,7 @@ void QgsDualView::previewExpressionChanged( const QString &expression )
 
 void QgsDualView::onSortColumnChanged()
 {
-  QgsAttributeTableConfig cfg = mLayer->attributeTableConfig();
+  QgsAttributeTableConfig cfg = attributeTableConfig();
   if ( cfg.sortExpression() != mFilterModel->sortExpression() ||
        cfg.sortOrder() != mFilterModel->sortOrder() )
   {
@@ -936,6 +934,11 @@ void QgsDualView::setSortExpression( const QString &sortExpression, Qt::SortOrde
 QString QgsDualView::sortExpression() const
 {
   return mFilterModel->sortExpression();
+}
+
+QgsAttributeTableConfig QgsDualView::attributeTableConfig() const
+{
+  return mConfig;
 }
 
 void QgsDualView::progress( int i, bool &cancel )

@@ -121,7 +121,7 @@ class PointsInPolygon(QgisAlgorithm):
         field_index = fields.lookupField(field_name)
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
-                                               fields, poly_source.wkbType(), poly_source.sourceCrs())
+                                               fields, poly_source.wkbType(), poly_source.sourceCrs(), QgsFeatureSink.RegeneratePrimaryKey)
         if sink is None:
             raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
@@ -155,14 +155,14 @@ class PointsInPolygon(QgisAlgorithm):
 
                     if engine.contains(point_feature.geometry().constGet()):
                         if weight_field_index >= 0:
-                            weight = point_feature.attributes()[weight_field_index]
+                            weight = point_feature[weight_field_index]
                             try:
                                 count += float(weight)
                             except:
                                 # Ignore fields with non-numeric values
                                 pass
                         elif class_field_index >= 0:
-                            point_class = point_feature.attributes()[class_field_index]
+                            point_class = point_feature[class_field_index]
                             if point_class not in classes:
                                 classes.add(point_class)
                         else:

@@ -24,14 +24,12 @@
 #include <memory>
 
 #include "qgsgeometry.h"
-#include "qgsmaplayer.h"
 #include "qgslayertreemodellegendnode.h"
 
 class QgsLayerTreeNode;
 class QgsLayerTreeGroup;
 class QgsLayerTreeLayer;
 class QgsMapHitTest;
-class QgsMapLayer;
 class QgsMapSettings;
 class QgsExpression;
 class QgsRenderContext;
@@ -271,10 +269,21 @@ class CORE_EXPORT QgsLayerTreeModel : public QAbstractItemModel
     QMap<QString, QString> layerStyleOverrides() const;
 
     /**
-     * Set map of map layer style overrides (key: layer ID, value: style name) where a different style should be used instead of the current one
+     * Sets map of map layer style overrides (key: layer ID, value: style name) where a different style should be used instead of the current one
      * \since QGIS 2.10
      */
     void setLayerStyleOverrides( const QMap<QString, QString> &overrides );
+
+    /**
+     * Scales an layer tree model icon size to compensate for display pixel density, making the icon
+     * size hi-dpi friendly, whilst still resulting in pixel-perfect sizes for low-dpi
+     * displays.
+     *
+     * \a standardSize should be set to a standard icon size, e.g. 16, 24, 48, etc.
+     *
+     * \since QGIS 3.6
+     */
+    static int scaleIconSize( int standardSize );
 
   protected slots:
     void nodeWillAddChildren( QgsLayerTreeNode *node, int indexFrom, int indexTo );

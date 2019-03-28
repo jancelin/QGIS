@@ -298,6 +298,8 @@ will be overwritten.
 
 .. seealso:: :py:func:`dataDefinedProperties`
 
+.. seealso:: Property
+
 .. versionadded:: 3.0
 %End
 
@@ -384,6 +386,8 @@ Returns a reference to the symbol layer's property collection, used for data def
 
 .. seealso:: :py:func:`setDataDefinedProperties`
 
+.. seealso:: Property
+
 .. versionadded:: 3.0
 %End
 
@@ -397,6 +401,13 @@ Sets the symbol layer's property collection, used for data defined overrides.
 .. seealso:: :py:func:`properties`
 
 .. versionadded:: 3.0
+%End
+
+    virtual bool hasDataDefinedProperties() const;
+%Docstring
+Returns true if the symbol layer (or any of its sub-symbols) contains data defined properties.
+
+.. versionadded:: 3.4.5
 %End
 
   protected:
@@ -811,12 +822,44 @@ class QgsLineSymbolLayer : QgsSymbolLayer
 #include "qgssymbollayer.h"
 %End
   public:
+
+    enum RenderRingFilter
+    {
+      AllRings,
+      ExteriorRingOnly,
+      InteriorRingsOnly,
+    };
+
     virtual void renderPolyline( const QPolygonF &points, QgsSymbolRenderContext &context ) = 0;
 
     virtual void renderPolygonStroke( const QPolygonF &points, QList<QPolygonF> *rings, QgsSymbolRenderContext &context );
 
     virtual void setWidth( double width );
+
     virtual double width() const;
+%Docstring
+Returns the estimated width for the line symbol layer.
+
+.. warning::
+
+   This returned value is inaccurate if the symbol layer has sub-symbols with
+   different width units. Use the overload accepting a :py:class:`QgsRenderContext`
+   argument instead for accurate sizes in this case.
+
+.. seealso:: :py:func:`setWidth`
+%End
+
+    virtual double width( const QgsRenderContext &context ) const;
+%Docstring
+Returns the line symbol layer width, in painter units.
+
+This method returns an accurate width by calculating the actual rendered
+width of the symbol layer using the provided render ``context``.
+
+.. seealso:: :py:func:`setWidth`
+
+.. versionadded:: 3.4.5
+%End
 
     double offset() const;
     void setOffset( double offset );
@@ -875,8 +918,35 @@ Returns the units for the line's offset.
     virtual double dxfWidth( const QgsDxfExport &e, QgsSymbolRenderContext &context ) const;
 
 
+    RenderRingFilter ringFilter() const;
+%Docstring
+Returns the line symbol layer's ring filter, which controls which rings are
+rendered when the line symbol is being used to draw a polygon's rings.
+
+This setting has no effect when the line symbol is not being rendered
+for a polygon.
+
+.. seealso:: :py:func:`setRingFilter`
+
+.. versionadded:: 3.4.3
+%End
+
+    void setRingFilter( QgsLineSymbolLayer::RenderRingFilter filter );
+%Docstring
+Sets the line symbol layer's ring ``filter``, which controls which rings are
+rendered when the line symbol is being used to draw a polygon's rings.
+
+This setting has no effect when the line symbol is not being rendered
+for a polygon.
+
+.. seealso:: :py:func:`ringFilter`
+
+.. versionadded:: 3.4.3
+%End
+
   protected:
     QgsLineSymbolLayer( bool locked = false );
+
 
 };
 

@@ -19,6 +19,7 @@
 #include "qgsprocessingparameters.h"
 #include "qgsprocessingoutputs.h"
 #include "qgsprojectionselectionwidget.h"
+#include "qgsprocessingmatrixparameterdialog.h"
 #include "qgsspinbox.h"
 #include "qgsdoublespinbox.h"
 #include "qgsprocessingcontext.h"
@@ -420,6 +421,8 @@ QgsProcessingNumericWidgetWrapper::QgsProcessingNumericWidgetWrapper( const QgsP
 QWidget *QgsProcessingNumericWidgetWrapper::createWidget()
 {
   const QgsProcessingParameterNumber *numberDef = static_cast< const QgsProcessingParameterNumber * >( parameterDefinition() );
+  const QVariantMap metadata = numberDef->metadata();
+  const int decimals = metadata.value( QStringLiteral( "widget_wrapper" ) ).toMap().value( QStringLiteral( "decimals" ), 6 ).toInt();
   switch ( type() )
   {
     case QgsProcessingGui::Standard:
@@ -433,13 +436,14 @@ QWidget *QgsProcessingNumericWidgetWrapper::createWidget()
         case QgsProcessingParameterNumber::Double:
           mDoubleSpinBox = new QgsDoubleSpinBox();
           mDoubleSpinBox->setExpressionsEnabled( true );
-          mDoubleSpinBox->setDecimals( 6 );
+          mDoubleSpinBox->setDecimals( decimals );
 
           // guess reasonable step value for double spin boxes
           if ( !qgsDoubleNear( numberDef->maximum(), std::numeric_limits<double>::max() ) &&
                !qgsDoubleNear( numberDef->minimum(), std::numeric_limits<double>::lowest() + 1 ) )
           {
-            const double singleStep = calculateStep( numberDef->minimum(), numberDef->maximum() );
+            double singleStep = calculateStep( numberDef->minimum(), numberDef->maximum() );
+            singleStep = std::max( singleStep, std::pow( 10, -decimals ) );
             mDoubleSpinBox->setSingleStep( singleStep );
           }
 
@@ -658,6 +662,8 @@ QgsAbstractProcessingParameterWidgetWrapper *QgsProcessingDistanceWidgetWrapper:
 
 QWidget *QgsProcessingDistanceWidgetWrapper::createWidget()
 {
+  const QgsProcessingParameterDistance *distanceDef = static_cast< const QgsProcessingParameterDistance * >( parameterDefinition() );
+
   QWidget *spin = QgsProcessingNumericWidgetWrapper::createWidget();
   switch ( type() )
   {
@@ -696,7 +702,7 @@ QWidget *QgsProcessingDistanceWidgetWrapper::createWidget()
       mWarningLabel->setLayout( warningLayout );
       layout->insertWidget( 4, mWarningLabel );
 
-      setUnits( QgsUnitTypes::DistanceUnknownUnit );
+      setUnits( distanceDef->defaultUnit() );
 
       QWidget *w = new QWidget();
       layout->setMargin( 0 );
@@ -937,6 +943,86 @@ QString QgsProcessingRangeWidgetWrapper::parameterType() const
 QgsAbstractProcessingParameterWidgetWrapper *QgsProcessingRangeWidgetWrapper::createWidgetWrapper( const QgsProcessingParameterDefinition *parameter, QgsProcessingGui::WidgetType type )
 {
   return new QgsProcessingRangeWidgetWrapper( parameter, type );
+}
+
+
+
+//
+// QgsProcessingMatrixWidgetWrapper
+//
+
+QgsProcessingMatrixWidgetWrapper::QgsProcessingMatrixWidgetWrapper( const QgsProcessingParameterDefinition *parameter, QgsProcessingGui::WidgetType type, QWidget *parent )
+  : QgsAbstractProcessingParameterWidgetWrapper( parameter, type, parent )
+{
+
+}
+
+QWidget *QgsProcessingMatrixWidgetWrapper::createWidget()
+{
+  mMatrixWidget = new QgsProcessingMatrixParameterPanel( nullptr, dynamic_cast< const QgsProcessingParameterMatrix *>( parameterDefinition() ) );
+  mMatrixWidget->setToolTip( parameterDefinition()->toolTip() );
+
+  connect( mMatrixWidget, &QgsProcessingMatrixParameterPanel::changed, this, [ = ]
+  {
+    emit widgetValueHasChanged( this );
+  } );
+
+  switch ( type() )
+  {
+    case QgsProcessingGui::Standard:
+    case QgsProcessingGui::Batch:
+    case QgsProcessingGui::Modeler:
+    {
+      return mMatrixWidget;
+    };
+  }
+  return nullptr;
+}
+
+void QgsProcessingMatrixWidgetWrapper::setWidgetValue( const QVariant &value, QgsProcessingContext &context )
+{
+  const QVariantList v = QgsProcessingParameters::parameterAsMatrix( parameterDefinition(), value, context );
+  if ( mMatrixWidget )
+    mMatrixWidget->setValue( v );
+}
+
+QVariant QgsProcessingMatrixWidgetWrapper::widgetValue() const
+{
+  if ( mMatrixWidget )
+    return mMatrixWidget->value().isEmpty() ? QVariant() : mMatrixWidget->value();
+  else
+    return QVariant();
+}
+
+QStringList QgsProcessingMatrixWidgetWrapper::compatibleParameterTypes() const
+{
+  return QStringList()
+         << QgsProcessingParameterMatrix::typeName();
+}
+
+QStringList QgsProcessingMatrixWidgetWrapper::compatibleOutputTypes() const
+{
+  return QStringList();
+}
+
+QList<int> QgsProcessingMatrixWidgetWrapper::compatibleDataTypes() const
+{
+  return QList< int >();
+}
+
+QString QgsProcessingMatrixWidgetWrapper::modelerExpressionFormatString() const
+{
+  return tr( "comma delimited string of values, or an array of values" );
+}
+
+QString QgsProcessingMatrixWidgetWrapper::parameterType() const
+{
+  return QgsProcessingParameterMatrix::typeName();
+}
+
+QgsAbstractProcessingParameterWidgetWrapper *QgsProcessingMatrixWidgetWrapper::createWidgetWrapper( const QgsProcessingParameterDefinition *parameter, QgsProcessingGui::WidgetType type )
+{
+  return new QgsProcessingMatrixWidgetWrapper( parameter, type );
 }
 
 

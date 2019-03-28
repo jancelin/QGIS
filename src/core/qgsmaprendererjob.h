@@ -132,7 +132,7 @@ class CORE_EXPORT QgsMapRendererJob : public QObject
     virtual void cancel() = 0;
 
     /**
-     * Triggers cancelation of the rendering job without blocking. The render job will continue
+     * Triggers cancellation of the rendering job without blocking. The render job will continue
      * to operate until it is able to cancel, at which stage the finished() signal will be emitted.
      * Does nothing if the rendering is not active.
      */
@@ -286,8 +286,14 @@ class CORE_EXPORT QgsMapRendererJob : public QObject
      */
     void cleanupLabelJob( LabelRenderJob &job ) SIP_SKIP;
 
+    /**
+     * \note not available in Python bindings
+     * \deprecated Will be removed in QGIS 4.0
+     */
+    Q_DECL_DEPRECATED static void drawLabeling( const QgsMapSettings &settings, QgsRenderContext &renderContext, QgsLabelingEngine *labelingEngine2, QPainter *painter ) SIP_SKIP;
+
     //! \note not available in Python bindings
-    static void drawLabeling( const QgsMapSettings &settings, QgsRenderContext &renderContext, QgsLabelingEngine *labelingEngine2, QPainter *painter ) SIP_SKIP;
+    static void drawLabeling( QgsRenderContext &renderContext, QgsLabelingEngine *labelingEngine2, QPainter *painter ) SIP_SKIP;
 
   private:
 

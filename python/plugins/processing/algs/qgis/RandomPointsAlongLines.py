@@ -100,7 +100,7 @@ class RandomPointsAlongLines(QgisAlgorithm):
         fields.append(QgsField('id', QVariant.Int, '', 10, 0))
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
-                                               fields, QgsWkbTypes.Point, source.sourceCrs())
+                                               fields, QgsWkbTypes.Point, source.sourceCrs(), QgsFeatureSink.RegeneratePrimaryKey)
         if sink is None:
             raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
@@ -163,7 +163,7 @@ class RandomPointsAlongLines(QgisAlgorithm):
                     f.setAttribute('id', nPoints)
                     f.setGeometry(geom)
                     sink.addFeature(f, QgsFeatureSink.FastInsert)
-                    index.insertFeature(f)
+                    index.addFeature(f)
                     points[nPoints] = p
                     nPoints += 1
                     feedback.setProgress(int(nPoints * total))

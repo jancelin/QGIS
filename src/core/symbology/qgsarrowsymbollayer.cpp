@@ -97,6 +97,9 @@ QgsSymbolLayer *QgsArrowSymbolLayer::create( const QgsStringMap &props )
   if ( props.contains( QStringLiteral( "offset_unit_scale" ) ) )
     l->setOffsetMapUnitScale( QgsSymbolLayerUtils::decodeMapUnitScale( props[QStringLiteral( "offset_unit_scale" )] ) );
 
+  if ( props.contains( QStringLiteral( "ring_filter" ) ) )
+    l->setRingFilter( static_cast< RenderRingFilter>( props[QStringLiteral( "ring_filter" )].toInt() ) );
+
   l->restoreOldDataDefinedProperties( props );
 
   l->setSubSymbol( QgsFillSymbol::createSimple( props ) );
@@ -148,6 +151,8 @@ QgsStringMap QgsArrowSymbolLayer::properties() const
   map[QStringLiteral( "offset_unit" )] = QgsUnitTypes::encodeUnit( offsetUnit() );
   map[QStringLiteral( "offset_unit_scale" )] = QgsSymbolLayerUtils::encodeMapUnitScale( offsetMapUnitScale() );
 
+  map[QStringLiteral( "ring_filter" )] = QString::number( static_cast< int >( mRingFilter ) );
+
   return map;
 }
 
@@ -160,6 +165,14 @@ QSet<QString> QgsArrowSymbolLayer::usedAttributes( const QgsRenderContext &conte
   return attributes;
 }
 
+bool QgsArrowSymbolLayer::hasDataDefinedProperties() const
+{
+  if ( QgsSymbolLayer::hasDataDefinedProperties() )
+    return true;
+  if ( mSymbol && mSymbol->hasDataDefinedProperties() )
+    return true;
+  return false;
+}
 
 void QgsArrowSymbolLayer::startRender( QgsSymbolRenderContext &context )
 {

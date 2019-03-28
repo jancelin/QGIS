@@ -18,6 +18,10 @@
 #include "qgsmessagelog.h"
 #include "qgsgeometry.h"
 #include "qgsgml.h"
+#include "qgsgeometrycollection.h"
+#include "qgsmultipoint.h"
+#include "qgsmultilinestring.h"
+#include "qgsmultipolygon.h"
 #include "qgsogcutils.h"
 #include "qgswfsconstants.h"
 #include "qgswfsfeatureiterator.h"
@@ -28,12 +32,15 @@
 #include "qgssettings.h"
 #include "qgsexception.h"
 #include "qgsfeedback.h"
+#include "qgssqliteutils.h"
 
 #include <algorithm>
 #include <QDir>
 #include <QProgressDialog>
 #include <QTimer>
 #include <QStyle>
+
+#include <sqlite3.h>
 
 QgsWFSFeatureHitsAsyncRequest::QgsWFSFeatureHitsAsyncRequest( QgsWFSDataSourceURI &uri )
   : QgsWfsRequest( uri )
@@ -329,10 +336,20 @@ QUrl QgsWFSFeatureDownloader::buildURL( qint64 startIndex, int maxFeatures, bool
   else if ( !mShared->mRect.isNull() )
   {
     bool invertAxis = false;
-    if ( !mShared->mWFSVersion.startsWith( QLatin1String( "1.0" ) ) && !mShared->mURI.ignoreAxisOrientation() &&
-         mShared->mSourceCRS.hasAxisInverted() )
+    if ( !mShared->mWFSVersion.startsWith( QLatin1String( "1.0" ) ) &&
+         !mShared->mURI.ignoreAxisOrientation() )
     {
-      invertAxis = true;
+      // This is a bit nasty, but if the server reports OGC::CRS84
+      // mSourceCRS will report hasAxisInverted() == false, but srsName()
+      // will be urn:ogc:def:crs:EPSG::4326, so axis inversion is needed...
+      if ( mShared->srsName() == QLatin1String( "urn:ogc:def:crs:EPSG::4326" ) )
+      {
+        invertAxis = true;
+      }
+      else if ( mShared->mSourceCRS.hasAxisInverted() )
+      {
+        invertAxis = true;
+      }
     }
     if ( mShared->mURI.invertAxisOrientation() )
     {
@@ -712,6 +729,49 @@ void QgsWFSFeatureDownloader::run( bool serializeFeatures, int maxFeatures )
             f.setGeometry( g );
           }
 
+          // If receiving a geometry collection, but expecting a multipoint/...,
+          // then try to convert it
+          if ( f.hasGeometry() &&
+               f.geometry().wkbType() == QgsWkbTypes::GeometryCollection &&
+               ( mShared->mWKBType == QgsWkbTypes::MultiPoint ||
+                 mShared->mWKBType == QgsWkbTypes::MultiLineString ||
+                 mShared->mWKBType == QgsWkbTypes::MultiPolygon ) )
+          {
+            QgsWkbTypes::Type singleType = QgsWkbTypes::singleType( mShared->mWKBType );
+            auto g = f.geometry().constGet();
+            auto gc = qgsgeometry_cast<QgsGeometryCollection *>( g );
+            bool allExpectedType = true;
+            for ( int i = 0; i < gc->numGeometries(); ++i )
+            {
+              if ( gc->geometryN( i )->wkbType() != singleType )
+              {
+                allExpectedType = false;
+                break;
+              }
+            }
+            if ( allExpectedType )
+            {
+              QgsGeometryCollection *newGC;
+              if ( mShared->mWKBType == QgsWkbTypes::MultiPoint )
+              {
+                newGC =  new QgsMultiPoint();
+              }
+              else if ( mShared->mWKBType == QgsWkbTypes::MultiLineString )
+              {
+                newGC = new QgsMultiLineString();
+              }
+              else
+              {
+                newGC = new QgsMultiPolygon();
+              }
+              for ( int i = 0; i < gc->numGeometries(); ++i )
+              {
+                newGC->addGeometry( gc->geometryN( i )->clone() );
+              }
+              f.setGeometry( QgsGeometry( newGC ) );
+            }
+          }
+
           featureList.push_back( QgsWFSFeatureGmlIdPair( f, gmlId ) );
           delete featPair.first;
           if ( ( i > 0 && ( i % 1000 ) == 0 ) || i + 1 == featurePtrList.size() )
@@ -929,12 +989,28 @@ QgsFeatureRequest QgsWFSFeatureIterator::buildRequestCache( int genCounter )
   QgsFeatureRequest requestCache;
   if ( mRequest.filterType() == QgsFeatureRequest::FilterFid ||
        mRequest.filterType() == QgsFeatureRequest::FilterFids )
-    requestCache = mRequest;
+  {
+    QgsFeatureIds qgisIds;
+    if ( mRequest.filterType() == QgsFeatureRequest::FilterFid )
+      qgisIds.insert( mRequest.filterFid() );
+    else
+      qgisIds = mRequest.filterFids();
+
+    requestCache.setFilterFids( mShared->dbIdsFromQgisIds( qgisIds ) );
+  }
   else
   {
     if ( mRequest.filterType() == QgsFeatureRequest::FilterExpression )
     {
+      // Transfer and transform context
       requestCache.setFilterExpression( mRequest.filterExpression()->expression() );
+      QgsExpressionContext ctx { *mRequest.expressionContext( ) };
+      QgsExpressionContextScope *scope { ctx.activeScopeForVariable( QgsExpressionContext::EXPR_FIELDS ) };
+      if ( scope )
+      {
+        scope->setVariable( QgsExpressionContext::EXPR_FIELDS, mShared->mCacheDataProvider->fields() );
+      }
+      requestCache.setExpressionContext( ctx );
     }
     if ( genCounter >= 0 )
     {
@@ -1094,7 +1170,7 @@ void QgsWFSFeatureIterator::featureReceivedSynchronous( const QVector<QgsWFSFeat
 // hence it is safe to quite the loop
 void QgsWFSFeatureIterator::featureReceived( int /*featureCount*/ )
 {
-  //QgsDebugMsg( QString("QgsWFSFeatureIterator::featureReceived %1 features").arg(featureCount) );
+  //QgsDebugMsg( QStringLiteral("QgsWFSFeatureIterator::featureReceived %1 features").arg(featureCount) );
   if ( mLoop )
     mLoop->quit();
 }
@@ -1181,6 +1257,19 @@ bool QgsWFSFeatureIterator::fetchFeature( QgsFeature &f )
 
     copyFeature( cachedFeature, f );
     geometryToDestinationCrs( f, mTransform );
+
+    // Retrieve the user-visible id from the Spatialite cache database Id
+    if ( mShared->mCacheIdDb.get() )
+    {
+      auto sql = QgsSqlite3Mprintf( "SELECT qgisId FROM id_cache WHERE dbId = %lld", cachedFeature.id() );
+      int resultCode;
+      auto stmt = mShared->mCacheIdDb.prepare( sql, resultCode );
+      if ( stmt.step() == SQLITE_ROW )
+      {
+        f.setId( stmt.columnAsInt64( 0 ) );
+      }
+    }
+
     return true;
   }
 
@@ -1366,38 +1455,35 @@ void QgsWFSFeatureIterator::copyFeature( const QgsFeature &srcFeature, QgsFeatur
   QgsFields &fields = mShared->mFields;
   dstFeature.initAttributes( fields.size() );
 
+  auto setAttr = [ & ]( const int i )
+  {
+    int idx = srcFeature.fields().indexFromName( fields.at( i ).name() );
+    if ( idx >= 0 )
+    {
+      const QVariant &v = srcFeature.attributes().value( idx );
+      if ( v.isNull() )
+        dstFeature.setAttribute( i, QVariant( fields.at( i ).type() ) );
+      else if ( v.type() == fields.at( i ).type() )
+        dstFeature.setAttribute( i, v );
+      else if ( fields.at( i ).type() == QVariant::DateTime && !v.isNull() )
+        dstFeature.setAttribute( i, QVariant( QDateTime::fromMSecsSinceEpoch( v.toLongLong() ) ) );
+      else
+        dstFeature.setAttribute( i, QgsVectorDataProvider::convertValue( fields.at( i ).type(), v.toString() ) );
+    }
+  };
+
   if ( mRequest.flags() & QgsFeatureRequest::SubsetOfAttributes )
   {
-    Q_FOREACH ( int i, mSubSetAttributes )
+    for ( auto i : qgis::as_const( mSubSetAttributes ) )
     {
-      int idx = srcFeature.fields().indexFromName( fields.at( i ).name() );
-      if ( idx >= 0 )
-      {
-        const QVariant &v = srcFeature.attributes().value( idx );
-        if ( v.type() == fields.at( i ).type() )
-          dstFeature.setAttribute( i, v );
-        else if ( fields.at( i ).type() == QVariant::DateTime && !v.isNull() )
-          dstFeature.setAttribute( i, QVariant( QDateTime::fromMSecsSinceEpoch( v.toLongLong() ) ) );
-        else
-          dstFeature.setAttribute( i, QgsVectorDataProvider::convertValue( fields.at( i ).type(), v.toString() ) );
-      }
+      setAttr( i );
     }
   }
   else
   {
     for ( int i = 0; i < fields.size(); i++ )
     {
-      int idx = srcFeature.fields().indexFromName( fields.at( i ).name() );
-      if ( idx >= 0 )
-      {
-        const QVariant &v = srcFeature.attributes().value( idx );
-        if ( v.type() == fields.at( i ).type() )
-          dstFeature.setAttribute( i, v );
-        else if ( fields.at( i ).type() == QVariant::DateTime && !v.isNull() )
-          dstFeature.setAttribute( i, QVariant( QDateTime::fromMSecsSinceEpoch( v.toLongLong() ) ) );
-        else
-          dstFeature.setAttribute( i, QgsVectorDataProvider::convertValue( fields.at( i ).type(), v.toString() ) );
-      }
+      setAttr( i );
     }
   }
 

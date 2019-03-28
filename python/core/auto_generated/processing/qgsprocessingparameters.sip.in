@@ -293,7 +293,6 @@ layers and other factors within the context.
 %Docstring
 Returns a string version of the parameter input ``value``, which is suitable for use as an input
 parameter value when running an algorithm directly from a Python command.
-The returned value must be correctly escaped - e.g. string values must be wrapped in ' 's.
 %End
 
     virtual QString asScriptCode() const;
@@ -588,7 +587,7 @@ Evaluates the parameter with matching ``definition`` and ``value`` to a static b
 
     static QgsFeatureSink *parameterAsSink( const QgsProcessingParameterDefinition *definition, const QVariantMap &parameters,
                                             const QgsFields &fields, QgsWkbTypes::Type geometryType, const QgsCoordinateReferenceSystem &crs,
-                                            QgsProcessingContext &context, QString &destinationIdentifier /Out/ ) /Factory/;
+                                            QgsProcessingContext &context, QString &destinationIdentifier /Out/, QgsFeatureSink::SinkFlags sinkFlags = 0 ) /Factory/;
 %Docstring
 Evaluates the parameter with matching ``definition`` to a feature sink.
 
@@ -605,7 +604,7 @@ This function creates a new object and the caller takes responsibility for delet
 
     static QgsFeatureSink *parameterAsSink( const QgsProcessingParameterDefinition *definition, const QVariant &value,
                                             const QgsFields &fields, QgsWkbTypes::Type geometryType, const QgsCoordinateReferenceSystem &crs,
-                                            QgsProcessingContext &context, QString &destinationIdentifier /Out/ ) /Factory/;
+                                            QgsProcessingContext &context, QString &destinationIdentifier /Out/, QgsFeatureSink::SinkFlags sinkFlags = 0 ) /Factory/;
 %Docstring
 Evaluates the parameter with matching ``definition`` and ``value`` to a feature sink.
 
@@ -1364,6 +1363,17 @@ class QgsProcessingParameterNumber : QgsProcessingParameterDefinition
 %Docstring
 A numeric parameter for processing algorithms.
 
+For numeric parameters with a dataType() of Double, the number of decimals places
+shown in the parameter's widget can be specified by setting the parameter's metadata. For example:
+
+.. code-block:: python
+
+       param = QgsProcessingParameterNumber( 'VAL', 'Threshold', type=QgsProcessingParameter.Double)
+       # only show two decimal places in parameter's widgets, not 6:
+       param.setMetadata( {'widget_wrapper':
+         { 'decimals': 2 }
+       })
+
 .. versionadded:: 3.0
 %End
 
@@ -1463,6 +1473,17 @@ class QgsProcessingParameterDistance : QgsProcessingParameterNumber
 A double numeric parameter for distance values. Linked to a source layer or CRS parameter
 to determine what units the distance values are in.
 
+The number of decimals places shown in a distance parameter's widget can be specified by
+setting the parameter's metadata. For example:
+
+.. code-block:: python
+
+       param = QgsProcessingParameterDistance( 'VAL', 'Threshold')
+       # only show two decimal places in parameter's widgets, not 6:
+       param.setMetadata( {'widget_wrapper':
+         { 'decimals': 2 }
+       })
+
 .. versionadded:: 3.2
 %End
 
@@ -1506,6 +1527,24 @@ Returns the name of the parent parameter, or an empty string if this is not set.
 Sets the name of the parent layer parameter. Use an empty string if this is not required.
 
 .. seealso:: :py:func:`parentParameterName`
+%End
+
+    QgsUnitTypes::DistanceUnit defaultUnit() const;
+%Docstring
+Returns the default distance unit for the parameter.
+
+.. seealso:: :py:func:`setDefaultUnit`
+
+.. versionadded:: 3.4.3
+%End
+
+    void setDefaultUnit( QgsUnitTypes::DistanceUnit unit );
+%Docstring
+Sets the default distance ``unit`` for the parameter.
+
+.. seealso:: :py:func:`defaultUnit`
+
+.. versionadded:: 3.4.3
 %End
 
     virtual QVariantMap toVariantMap() const;

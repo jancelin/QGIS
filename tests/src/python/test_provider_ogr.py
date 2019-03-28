@@ -19,8 +19,10 @@ import tempfile
 
 from osgeo import gdal, ogr  # NOQA
 from qgis.PyQt.QtCore import QVariant
-from qgis.core import (QgsApplication,
+from qgis.core import (NULL,
+                       QgsApplication,
                        QgsRectangle,
+                       QgsProviderRegistry,
                        QgsFeature, QgsFeatureRequest, QgsField, QgsSettings, QgsDataProvider,
                        QgsVectorDataProvider, QgsVectorLayer, QgsWkbTypes, QgsNetworkAccessManager)
 from qgis.testing import start_app, unittest
@@ -71,6 +73,10 @@ class PyQgsOGRProvider(unittest.TestCase):
         """Run after all tests"""
         for dirname in cls.dirs_to_cleanup:
             shutil.rmtree(dirname, True)
+
+    def testCapabilities(self):
+        self.assertTrue(QgsProviderRegistry.instance().providerCapabilities("ogr") & QgsDataProvider.File)
+        self.assertTrue(QgsProviderRegistry.instance().providerCapabilities("ogr") & QgsDataProvider.Dir)
 
     def testUpdateMode(self):
 
@@ -453,6 +459,45 @@ class PyQgsOGRProvider(unittest.TestCase):
         self.assertTrue(iter_multipolygons.nextFeature(f))
         self.assertTrue(iter_multipolygons.nextFeature(f))
         self.assertFalse(iter_multipolygons.nextFeature(f))
+
+        # Re-start an iterator (tests #20098)
+        iter_multipolygons = vl_multipolygons.getFeatures(QgsFeatureRequest())
+        self.assertTrue(iter_multipolygons.nextFeature(f))
+
+        # Test filter by id (#20308)
+        f = next(vl_multipolygons.getFeatures(QgsFeatureRequest().setFilterFid(8)))
+        self.assertTrue(f.isValid())
+        self.assertEqual(f.id(), 8)
+
+        f = next(vl_multipolygons.getFeatures(QgsFeatureRequest().setFilterFid(1)))
+        self.assertTrue(f.isValid())
+        self.assertEqual(f.id(), 1)
+
+        f = next(vl_multipolygons.getFeatures(QgsFeatureRequest().setFilterFid(5)))
+        self.assertTrue(f.isValid())
+        self.assertEqual(f.id(), 5)
+
+        # 6 doesn't exist
+        it = vl_multipolygons.getFeatures(QgsFeatureRequest().setFilterFids([1, 5, 6, 8]))
+        f = next(it)
+        self.assertTrue(f.isValid())
+        self.assertEqual(f.id(), 1)
+        f = next(it)
+        self.assertTrue(f.isValid())
+        self.assertEqual(f.id(), 5)
+        f = next(it)
+        self.assertTrue(f.isValid())
+        self.assertEqual(f.id(), 8)
+        del it
+
+    def testBoolFieldEvaluation(self):
+        datasource = os.path.join(unitTestDataPath(), 'bool_geojson.json')
+        vl = QgsVectorLayer(datasource, 'test', 'ogr')
+        self.assertTrue(vl.isValid())
+        self.assertEqual(vl.fields().at(0).name(), 'bool')
+        self.assertEqual(vl.fields().at(0).type(), QVariant.Bool)
+        self.assertEqual([f[0] for f in vl.getFeatures()], [True, False, NULL])
+        self.assertEqual([f[0].__class__.__name__ for f in vl.getFeatures()], ['bool', 'bool', 'QVariant'])
 
 
 if __name__ == '__main__':

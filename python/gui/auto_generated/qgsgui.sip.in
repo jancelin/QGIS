@@ -100,11 +100,29 @@ Sets the global window ``manager``. Ownership is transferred to the QgsGui insta
 .. versionadded:: 3.4
 %End
 
+    enum HigFlag
+    {
+      HigMenuTextIsTitleCase,
+      HigDialogTitleIsTitleCase
+    };
+    typedef QFlags<QgsGui::HigFlag> HigFlags;
+
+
+    static QgsGui::HigFlags higFlags();
+%Docstring
+Returns the platform's HIG flags.
+
+.. versionadded:: 3.4
+%End
+
     ~QgsGui();
 
   private:
     QgsGui( const QgsGui &other );
 };
+
+QFlags<QgsGui::HigFlag> operator|(QgsGui::HigFlag f1, QFlags<QgsGui::HigFlag> f2);
+
 
 /************************************************************************
  * This file has been generated automatically from                      *

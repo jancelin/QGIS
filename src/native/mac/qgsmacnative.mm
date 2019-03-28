@@ -76,7 +76,7 @@ void QgsMacNative::currentAppActivateIgnoringOtherApps()
 
 void QgsMacNative::openFileExplorerAndSelectFile( const QString &path )
 {
-  NSString *pathStr = [[NSString alloc] initWithUTF8String:path.toUtf8().data()];
+  NSString *pathStr = [[NSString alloc] initWithUTF8String:path.toUtf8().constData()];
   NSArray *fileURLs = [NSArray arrayWithObjects:[NSURL fileURLWithPath:pathStr], nil];
   [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:fileURLs];
 }
@@ -117,4 +117,27 @@ QgsNative::NotificationResult QgsMacNative::showDesktopNotification( const QStri
   NotificationResult result;
   result.successful = true;
   return result;
+}
+
+bool QgsMacNative::hasDarkTheme()
+{
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101400
+  if ( [NSApp respondsToSelector:@selector( effectiveAppearance )] )
+  {
+    // compiled on macos 10.14+ AND running on macos 10.14+
+    // check the settings of effective appearance of the user
+    NSAppearanceName appearanceName = [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
+    return ( [appearanceName isEqualToString:NSAppearanceNameDarkAqua] );
+  }
+  else
+  {
+    // compiled on macos 10.14+ BUT running on macos 10.13-
+    // DarkTheme was introduced in MacOS 10.14, fallback to light theme
+    return false;
+  }
+#endif
+  // compiled on macos 10.13-
+  // NSAppearanceNameDarkAqua is not in SDK headers
+  // fallback to light theme
+  return false;
 }

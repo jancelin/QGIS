@@ -17,7 +17,8 @@ import qgis  # NOQA
 from PyQt5.QtCore import QVariant
 from qgis.testing import unittest, start_app
 from qgis.core import QgsGeometry, QgsPoint, QgsPointXY, QgsCircle, QgsCircularString, QgsCompoundCurve,\
-    QgsCurvePolygon, QgsEllipse, QgsLineString, QgsMultiCurve, QgsRectangle, QgsExpression, QgsField
+    QgsCurvePolygon, QgsEllipse, QgsLineString, QgsMultiCurve, QgsRectangle, QgsExpression, QgsField, QgsError,\
+    QgsMimeDataUtils
 
 start_app()
 
@@ -25,9 +26,19 @@ start_app()
 class TestPython__repr__(unittest.TestCase):
 
     def testQgsGeometryRepr(self):
+
+        g = QgsGeometry()
+        self.assertEqual(g.__repr__(), '<QgsGeometry: null>')
         p = QgsPointXY(123.456, 987.654)
         g = QgsGeometry.fromPointXY(p)
         self.assertTrue(g.__repr__().startswith('<QgsGeometry: Point (123.456'))
+        g = QgsGeometry(QgsLineString([QgsPoint(0, 2), QgsPoint(1010, 2)]))
+        g = g.densifyByCount(1000)
+        # long strings must be truncated for performance -- otherwise they flood the console/first aid output
+        self.assertTrue(g.__repr__().startswith('<QgsGeometry: LineString (0 2,'))
+        self.assertTrue(
+            g.__repr__().endswith('...>'))
+        self.assertEqual(len(g.__repr__()), 1018)
 
     def testQgsPointRepr(self):
         p = QgsPoint(123.456, 987.654, 100)
@@ -120,6 +131,16 @@ class TestPython__repr__(unittest.TestCase):
     def testQgsFieldRepr(self):
         f = QgsField('field_name', QVariant.Double, 'double')
         self.assertEqual(f.__repr__(), "<QgsField: field_name (double)>")
+
+    def testQgsErrorRepr(self):
+        e = QgsError('you done wrong son', 'dad')
+        self.assertEqual(e.__repr__(), "<QgsError: dad you done wrong son>")
+
+    def testQgsMimeDataUri(self):
+        d = QgsMimeDataUtils.Uri()
+        d.uri = 'my_uri'
+        d.providerKey = 'my_provider'
+        self.assertEqual(d.__repr__(), "<QgsMimeDataUtils::Uri (my_provider): my_uri>")
 
 
 if __name__ == "__main__":

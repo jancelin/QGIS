@@ -104,11 +104,12 @@ class sieve(GdalAlgorithm):
         if self.parameterAsBool(parameters, self.NO_MASK, context):
             arguments.append('-nomask')
 
-        mask = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        mask = self.parameterAsRasterLayer(parameters, self.MASK_LAYER, context)
         if mask:
             arguments.append('-mask {}'.format(mask.source()))
 
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         arguments.append('-of')
         arguments.append(QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]))
 
@@ -119,11 +120,11 @@ class sieve(GdalAlgorithm):
         arguments.append(raster.source())
         arguments.append(out)
 
-        commands = []
         if isWindows():
-            commands = ['cmd.exe', '/C ', self.commandName() + '.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
+            commands = ["python3", "-m", self.commandName()]
         else:
-            commands = [self.commandName() + '.py', GdalUtils.escapeAndJoin(arguments)]
+            commands = [self.commandName() + '.py']
+
+        commands.append(GdalUtils.escapeAndJoin(arguments))
 
         return commands

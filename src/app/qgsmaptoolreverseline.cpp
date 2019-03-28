@@ -26,8 +26,8 @@
 #include "qgisapp.h"
 #include "qgslinestring.h"
 #include "qgsmultilinestring.h"
+#include "qgsmapmouseevent.h"
 
-#include <QMouseEvent>
 
 QgsMapToolReverseLine::QgsMapToolReverseLine( QgsMapCanvas *canvas )
   : QgsMapToolEdit( canvas )
@@ -115,7 +115,7 @@ void QgsMapToolReverseLine::canvasReleaseEvent( QgsMapMouseEvent *e )
 
     }
 
-    if ( geom )
+    if ( !geom.isNull() )
     {
       vlayer->beginEditCommand( tr( "Reverse line" ) );
       vlayer->changeGeometry( f.id(), geom );
@@ -128,6 +128,7 @@ void QgsMapToolReverseLine::canvasReleaseEvent( QgsMapMouseEvent *e )
       emit messageEmitted( tr( "Couldn't reverse the selected part." ) );
     }
   }
+  mRubberBand.reset();
 }
 
 QgsGeometry QgsMapToolReverseLine::partUnderPoint( QPoint point, QgsFeatureId &fid, int &partNum )

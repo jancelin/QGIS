@@ -43,6 +43,8 @@ QgsLayoutItemMap::QgsLayoutItemMap( QgsLayout *layout )
 
   assignFreeId();
 
+  setCacheMode( QGraphicsItem::NoCache );
+
   connect( this, &QgsLayoutItem::sizePositionChanged, this, [ = ]
   {
     shapeChanged();
@@ -73,6 +75,11 @@ int QgsLayoutItemMap::type() const
 QIcon QgsLayoutItemMap::icon() const
 {
   return QgsApplication::getThemeIcon( QStringLiteral( "/mLayoutItemMap.svg" ) );
+}
+
+QgsLayoutItem::Flags QgsLayoutItemMap::itemFlags() const
+{
+  return QgsLayoutItem::FlagOverridesPaint;
 }
 
 void QgsLayoutItemMap::assignFreeId()
@@ -131,6 +138,9 @@ void QgsLayoutItemMap::refresh()
 
 double QgsLayoutItemMap::scale() const
 {
+  if ( rect().isEmpty() )
+    return 0;
+
   QgsScaleCalculator calculator;
   calculator.setMapUnits( crs().mapUnits() );
   calculator.setDpi( 25.4 );  //Using mm
@@ -540,7 +550,7 @@ bool QgsLayoutItemMap::writePropertiesToElement( QDomElement &mapElem, QDomDocum
   }
 
   // follow map theme
-  mapElem.setAttribute( QStringLiteral( "followPreset" ), mFollowVisibilityPreset ? "true" : "false" );
+  mapElem.setAttribute( QStringLiteral( "followPreset" ), mFollowVisibilityPreset ? QStringLiteral( "true" ) : QStringLiteral( "false" ) );
   mapElem.setAttribute( QStringLiteral( "followPresetName" ), mFollowVisibilityPresetName );
 
   //map rotation
@@ -771,7 +781,13 @@ void QgsLayoutItemMap::paint( QPainter *painter, const QStyleOptionGraphicsItem 
       painter->setFont( messageFont );
       painter->setPen( QColor( 255, 255, 255, 255 ) );
       painter->drawText( thisPaintRect, Qt::AlignCenter | Qt::AlignHCenter, tr( "Rendering map" ) );
-      if ( !mPainterJob && !mDrawingPreview )
+      if ( mPainterJob && mCacheInvalidated && !mDrawingPreview )
+      {
+        // current job was invalidated - start a new one
+        mPreviewScaleFactor = QgsLayoutUtils::scaleFactorFromItemStyle( style );
+        mBackgroundUpdateTimer->start( 1 );
+      }
+      else if ( !mPainterJob && !mDrawingPreview )
       {
         // this is the map's very first paint - trigger a cache update
         mPreviewScaleFactor = QgsLayoutUtils::scaleFactorFromItemStyle( style );
@@ -837,21 +853,21 @@ void QgsLayoutItemMap::paint( QPainter *painter, const QStyleOptionGraphicsItem 
       // rasterize
       double destinationDpi = QgsLayoutUtils::scaleFactorFromItemStyle( style ) * 25.4;
       double layoutUnitsInInches = mLayout ? mLayout->convertFromLayoutUnits( 1, QgsUnitTypes::LayoutInches ).length() : 1;
-      int widthInPixels = std::round( boundingRect().width() * layoutUnitsInInches * destinationDpi );
-      int heightInPixels = std::round( boundingRect().height() * layoutUnitsInInches * destinationDpi );
+      int widthInPixels = static_cast< int >( std::round( boundingRect().width() * layoutUnitsInInches * destinationDpi ) );
+      int heightInPixels = static_cast< int >( std::round( boundingRect().height() * layoutUnitsInInches * destinationDpi ) );
       QImage image = QImage( widthInPixels, heightInPixels, QImage::Format_ARGB32 );
 
       image.fill( Qt::transparent );
-      image.setDotsPerMeterX( 1000 * destinationDpi / 25.4 );
-      image.setDotsPerMeterY( 1000 * destinationDpi / 25.4 );
+      image.setDotsPerMeterX( static_cast< int >( std::round( 1000 * destinationDpi / 25.4 ) ) );
+      image.setDotsPerMeterY( static_cast< int >( std::round( 1000 * destinationDpi / 25.4 ) ) );
       double dotsPerMM = destinationDpi / 25.4;
       QPainter p( &image );
 
       QPointF tl = -boundingRect().topLeft();
-      QRect imagePaintRect( std::round( tl.x() * dotsPerMM ),
-                            std::round( tl.y() * dotsPerMM ),
-                            std::round( thisPaintRect.width() * dotsPerMM ),
-                            std::round( thisPaintRect.height() * dotsPerMM ) );
+      QRect imagePaintRect( static_cast< int >( std::round( tl.x() * dotsPerMM ) ),
+                            static_cast< int >( std::round( tl.y() * dotsPerMM ) ),
+                            static_cast< int >( std::round( thisPaintRect.width() * dotsPerMM ) ),
+                            static_cast< int >( std::round( thisPaintRect.height() * dotsPerMM ) ) );
       p.setClipRect( imagePaintRect );
 
       p.translate( imagePaintRect.topLeft() );
@@ -884,7 +900,7 @@ void QgsLayoutItemMap::paint( QPainter *painter, const QStyleOptionGraphicsItem 
 
       painter->save();
       painter->scale( 1 / dotsPerMM, 1 / dotsPerMM ); // scale painter from mm to dots
-      painter->drawImage( std::round( -tl.x()* dotsPerMM ), std::round( -tl.y() * dotsPerMM ), image );
+      painter->drawImage( QPointF( -tl.x()* dotsPerMM, -tl.y() * dotsPerMM ), image );
       painter->scale( dotsPerMM, dotsPerMM );
       painter->restore();
     }
@@ -994,8 +1010,8 @@ void QgsLayoutItemMap::recreateCachedImageInBackground()
   double widthLayoutUnits = ext.width() * mapUnitsToLayoutUnits();
   double heightLayoutUnits = ext.height() * mapUnitsToLayoutUnits();
 
-  int w = widthLayoutUnits * mPreviewScaleFactor;
-  int h = heightLayoutUnits * mPreviewScaleFactor;
+  int w = static_cast< int >( std::round( widthLayoutUnits * mPreviewScaleFactor ) );
+  int h = static_cast< int >( std::round( heightLayoutUnits * mPreviewScaleFactor ) );
 
   // limit size of image for better performance
   if ( w > 5000 || h > 5000 )
@@ -1003,12 +1019,12 @@ void QgsLayoutItemMap::recreateCachedImageInBackground()
     if ( w > h )
     {
       w = 5000;
-      h = w * heightLayoutUnits / widthLayoutUnits;
+      h = static_cast< int>( std::round( w * heightLayoutUnits / widthLayoutUnits ) );
     }
     else
     {
       h = 5000;
-      w = h * widthLayoutUnits / heightLayoutUnits;
+      w = static_cast< int >( std::round( h * widthLayoutUnits / heightLayoutUnits ) );
     }
   }
 
@@ -1018,8 +1034,8 @@ void QgsLayoutItemMap::recreateCachedImageInBackground()
   mCacheRenderingImage.reset( new QImage( w, h, QImage::Format_ARGB32 ) );
 
   // set DPI of the image
-  mCacheRenderingImage->setDotsPerMeterX( 1000 * w / widthLayoutUnits );
-  mCacheRenderingImage->setDotsPerMeterY( 1000 * h / heightLayoutUnits );
+  mCacheRenderingImage->setDotsPerMeterX( static_cast< int >( std::round( 1000 * w / widthLayoutUnits ) ) );
+  mCacheRenderingImage->setDotsPerMeterY( static_cast< int >( std::round( 1000 * h / heightLayoutUnits ) ) );
 
   if ( hasBackground() )
   {
@@ -1104,12 +1120,15 @@ QgsMapSettings QgsLayoutItemMap::mapSettings( const QgsRectangle &extent, QSizeF
   jobMapSettings.setFlag( QgsMapSettings::ForceVectorOutput, true ); // force vector output (no caching of marker images etc.)
   jobMapSettings.setFlag( QgsMapSettings::Antialiasing, mLayout->renderContext().flags() & QgsLayoutRenderContext::FlagAntialiasing );
   jobMapSettings.setFlag( QgsMapSettings::DrawEditingInfo, false );
-  jobMapSettings.setFlag( QgsMapSettings::DrawSelection, false );
+  jobMapSettings.setSelectionColor( mLayout->renderContext().selectionColor() );
+  jobMapSettings.setFlag( QgsMapSettings::DrawSelection, mLayout->renderContext().flags() & QgsLayoutRenderContext::FlagDrawSelection );
   jobMapSettings.setFlag( QgsMapSettings::UseAdvancedEffects, mLayout->renderContext().flags() & QgsLayoutRenderContext::FlagUseAdvancedEffects );
   jobMapSettings.setTransformContext( mLayout->project()->transformContext() );
   jobMapSettings.setPathResolver( mLayout->project()->pathResolver() );
 
   jobMapSettings.setLabelingEngineSettings( mLayout->project()->labelingEngineSettings() );
+  // override the default text render format inherited from the labeling engine settings using the layout's render context setting
+  jobMapSettings.setTextRenderFormat( mLayout->renderContext().textRenderFormat() );
 
   return jobMapSettings;
 }
@@ -1960,9 +1979,10 @@ void QgsLayoutItemMap::updateAtlasFeature()
     }
     newExtent = QgsRectangle( xa1, ya1, xa2, ya2 );
 
-    if ( mAtlasMargin > 0.0 )
+    const double evaluatedAtlasMargin = atlasMargin();
+    if ( evaluatedAtlasMargin > 0.0 )
     {
-      newExtent.scale( 1 + mAtlasMargin );
+      newExtent.scale( 1 + evaluatedAtlasMargin );
     }
   }
 

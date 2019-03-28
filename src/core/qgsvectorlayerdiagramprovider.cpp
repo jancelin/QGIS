@@ -78,8 +78,12 @@ QList<QgsLabelFeature *> QgsVectorLayerDiagramProvider::labelFeatures( QgsRender
   QgsFeatureRequest request;
   request.setFilterRect( layerExtent );
   request.setSubsetOfAttributes( attributeNames, mFields );
+  const QgsFeatureFilterProvider *featureFilterProvider = context.featureFilterProvider();
+  if ( featureFilterProvider )
+  {
+    featureFilterProvider->filterFeatures( qobject_cast<QgsVectorLayer *>( mLayer ), request );
+  }
   QgsFeatureIterator fit = mSource->getFeatures( request );
-
 
   QgsFeature fet;
   while ( fit.nextFeature( fet ) )
@@ -144,14 +148,12 @@ bool QgsVectorLayerDiagramProvider::prepare( const QgsRenderContext &context, QS
   const QgsMapSettings &mapSettings = mEngine->mapSettings();
 
   if ( context.coordinateTransform().isValid() )
-    // this is context for layer rendering - use its CT as it includes correct datum transform
+    // this is context for layer rendering
     s2.setCoordinateTransform( context.coordinateTransform() );
   else
   {
-    // otherwise fall back to creating our own CT - this one may not have the correct datum transform!
-    Q_NOWARN_DEPRECATED_PUSH
-    s2.setCoordinateTransform( QgsCoordinateTransform( mLayerCrs, mapSettings.destinationCrs() ) );
-    Q_NOWARN_DEPRECATED_POP
+    // otherwise fall back to creating our own CT
+    s2.setCoordinateTransform( QgsCoordinateTransform( mLayerCrs, mapSettings.destinationCrs(), context.transformContext() ) );
   }
 
   s2.setRenderer( mDiagRenderer );
@@ -233,7 +235,7 @@ QgsLabelFeature *QgsVectorLayerDiagramProvider::registerDiagram( QgsFeature &fea
 
   geos::unique_ptr geosObstacleGeomClone;
   std::unique_ptr<QgsGeometry> scopedObstacleGeom;
-  if ( isObstacle && obstacleGeometry && QgsPalLabeling::geometryRequiresPreparation( obstacleGeometry, context, mSettings.coordinateTransform(), extentGeom ) )
+  if ( isObstacle && !obstacleGeometry.isNull() && QgsPalLabeling::geometryRequiresPreparation( obstacleGeometry, context, mSettings.coordinateTransform(), extentGeom ) )
   {
     QgsGeometry preparedObstacleGeom = QgsPalLabeling::prepareGeometry( obstacleGeometry, context, mSettings.coordinateTransform(), extentGeom );
     geosObstacleGeomClone = QgsGeos::asGeos( preparedObstacleGeom );

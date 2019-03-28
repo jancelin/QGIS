@@ -35,7 +35,6 @@
 #include "qgis_app.h"
 #include "qgsaddattrdialog.h"
 #include "qgslogger.h"
-#include "qgsproject.h"
 #include "qgsexpressionbuilderdialog.h"
 #include "qgsfieldcalculator.h"
 #include "qgsfieldexpressionwidget.h"
@@ -150,10 +149,6 @@ class APP_EXPORT QgsAttributesFormProperties : public QWidget, private Ui_QgsAtt
       bool mEditableEnabled =  true ;
       bool mLabelOnTop =  false ;
       QgsFieldConstraints mFieldConstraints;
-      QgsFieldConstraints::Constraints mConstraints = nullptr;
-      QHash< QgsFieldConstraints::Constraint, QgsFieldConstraints::ConstraintStrength > mConstraintStrength;
-      QString mConstraint;
-      QString mConstraintDescription;
       QPushButton *mButton = nullptr;
       QString mEditorWidgetType;
       QMap<QString, QVariant> mEditorWidgetConfig;
@@ -267,7 +262,7 @@ class DnDTree : public QTreeWidget
 
 
     Type type() const;
-    void setType( const Type &value );
+    void setType( DnDTree::Type value );
 
   protected:
     void dragMoveEvent( QDragMoveEvent *event ) override;

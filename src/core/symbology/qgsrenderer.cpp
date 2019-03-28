@@ -59,7 +59,7 @@ QgsFeatureRenderer::QgsFeatureRenderer( const QString &type )
   : mType( type )
   , mUsingSymbolLevels( false )
   , mCurrentVertexMarkerType( QgsVectorLayer::Cross )
-  , mCurrentVertexMarkerSize( 3 )
+  , mCurrentVertexMarkerSize( 2 )
   , mForceRaster( false )
   , mOrderByEnabled( false )
 {
@@ -245,7 +245,7 @@ QgsFeatureRenderer *QgsFeatureRenderer::loadSld( const QDomNode &node, QgsWkbTyp
 
       if ( ruleCount > 1 )
       {
-        QgsDebugMsg( "more Rule elements found: need a RuleRenderer" );
+        QgsDebugMsg( QStringLiteral( "more Rule elements found: need a RuleRenderer" ) );
         needRuleRenderer = true;
       }
 
@@ -257,7 +257,7 @@ QgsFeatureRenderer *QgsFeatureRenderer::loadSld( const QDomNode &node, QgsWkbTyp
              ruleChildElem.localName() == QLatin1String( "MinScaleDenominator" ) ||
              ruleChildElem.localName() == QLatin1String( "MaxScaleDenominator" ) )
         {
-          QgsDebugMsg( "Filter or Min/MaxScaleDenominator element found: need a RuleRenderer" );
+          QgsDebugMsg( QStringLiteral( "Filter or Min/MaxScaleDenominator element found: need a RuleRenderer" ) );
           needRuleRenderer = true;
           break;
         }
@@ -279,7 +279,7 @@ QgsFeatureRenderer *QgsFeatureRenderer::loadSld( const QDomNode &node, QgsWkbTyp
   {
     rendererType = QStringLiteral( "singleSymbol" );
   }
-  QgsDebugMsg( QString( "Instantiating a '%1' renderer..." ).arg( rendererType ) );
+  QgsDebugMsg( QStringLiteral( "Instantiating a '%1' renderer..." ).arg( rendererType ) );
 
   // create the renderer and return it
   QgsRendererAbstractMetadata *m = QgsApplication::rendererRegistry()->rendererMetadata( rendererType );
@@ -336,7 +336,7 @@ QgsLegendSymbolList QgsFeatureRenderer::legendSymbolItems() const
   return QgsLegendSymbolList();
 }
 
-void QgsFeatureRenderer::setVertexMarkerAppearance( int type, int size )
+void QgsFeatureRenderer::setVertexMarkerAppearance( int type, double size )
 {
   mCurrentVertexMarkerType = type;
   mCurrentVertexMarkerSize = size;
@@ -349,9 +349,10 @@ bool QgsFeatureRenderer::willRenderFeature( const QgsFeature &feature, QgsRender
 
 void QgsFeatureRenderer::renderVertexMarker( QPointF pt, QgsRenderContext &context )
 {
-  QgsVectorLayer::drawVertexMarker( pt.x(), pt.y(), *context.painter(),
-                                    static_cast< QgsVectorLayer::VertexMarkerType >( mCurrentVertexMarkerType ),
-                                    mCurrentVertexMarkerSize );
+  int markerSize = context.convertToPainterUnits( mCurrentVertexMarkerSize, QgsUnitTypes::RenderMillimeters );
+  QgsSymbolLayerUtils::drawVertexMarker( pt.x(), pt.y(), *context.painter(),
+                                         static_cast< QgsSymbolLayerUtils::VertexMarkerType >( mCurrentVertexMarkerType ),
+                                         markerSize );
 }
 
 void QgsFeatureRenderer::renderVertexMarkerPolyline( QPolygonF &pts, QgsRenderContext &context )

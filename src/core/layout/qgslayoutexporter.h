@@ -276,6 +276,14 @@ class CORE_EXPORT QgsLayoutExporter
        */
       QgsLayoutRenderContext::Flags flags = nullptr;
 
+      /**
+       * Text rendering format, which controls how text should be rendered in the export (e.g.
+       * as paths or real text objects).
+       *
+       * \since QGIS 3.4.3
+       */
+      QgsRenderContext::TextRenderFormat textRenderFormat = QgsRenderContext::TextFormatAlwaysOutlines;
+
     };
 
     /**
@@ -415,6 +423,14 @@ class CORE_EXPORT QgsLayoutExporter
        */
       QgsLayoutRenderContext::Flags flags = nullptr;
 
+      /**
+       * Text rendering format, which controls how text should be rendered in the export (e.g.
+       * as paths or real text objects).
+       *
+       * \since QGIS 3.4.3
+       */
+      QgsRenderContext::TextRenderFormat textRenderFormat = QgsRenderContext::TextFormatAlwaysOutlines;
+
     };
 
     /**
@@ -497,6 +513,12 @@ class CORE_EXPORT QgsLayoutExporter
     QImage createImage( const ImageExportSettings &settings, int page, QRectF &bounds, bool &skipPage ) const;
 
     /**
+     * Returns the page number of the first page to be exported from the layout, skipping any pages
+     * which have been excluded from export.
+     */
+    static int firstPageToBeExported( QgsLayout *layout );
+
+    /**
      * Saves an image to a file, possibly using format specific options (e.g. LZW compression for tiff)
     */
     static bool saveImage( const QImage &image, const QString &imageFilename, const QString &imageFormat, QgsProject *projectForMetadata );
@@ -543,7 +565,7 @@ class CORE_EXPORT QgsLayoutExporter
 
     static void updatePrinterPageSize( QgsLayout *layout, QPrinter &printer, int page );
 
-    ExportResult renderToLayeredSvg( const SvgExportSettings &settings, double width, double height, int page, QRectF bounds,
+    ExportResult renderToLayeredSvg( const SvgExportSettings &settings, double width, double height, int page, const QRectF &bounds,
                                      const QString &filename, int svgLayerId, const QString &layerName,
                                      QDomDocument &svg, QDomNode &svgDocRoot, bool includeMetadata ) const;
 

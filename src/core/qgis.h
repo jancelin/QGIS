@@ -20,7 +20,6 @@
 
 #include <QEvent>
 #include <QString>
-#include <QRegExp>
 #include <QMetaType>
 #include <QMap>
 #include <QMetaEnum>
@@ -239,9 +238,35 @@ CORE_EXPORT uint qHash( const QVariant &variant );
 inline QString qgsDoubleToString( double a, int precision = 17 )
 {
   if ( precision )
-    return QString::number( a, 'f', precision ).remove( QRegExp( "\\.?0+$" ) );
+  {
+    QString str = QString::number( a, 'f', precision );
+    if ( str.contains( QLatin1Char( '.' ) ) )
+    {
+      // remove ending 0s
+      int idx = str.length() - 1;
+      while ( str.at( idx ) == '0' && idx > 1 )
+      {
+        idx--;
+      }
+      if ( idx < str.length() - 1 )
+        str.truncate( str.at( idx ) == '.' ? idx : idx + 1 );
+    }
+    return str;
+  }
   else
-    return QString::number( a, 'f', precision );
+  {
+    // avoid printing -0
+    // see https://bugreports.qt.io/browse/QTBUG-71439
+    const QString str( QString::number( a, 'f', precision ) );
+    if ( str == QLatin1String( "-0" ) )
+    {
+      return QLatin1String( "0" );
+    }
+    else
+    {
+      return str;
+    }
+  }
 }
 
 /**
@@ -289,10 +314,11 @@ inline bool qgsDoubleNearSig( double a, double b, int significantDigits = 10 )
  *
  * \since QGIS 3.0
  */
-inline double qgsRound( double number, double places )
+inline double qgsRound( double number, int places )
 {
+  double m = ( number < 0.0 ) ? -1.0 : 1.0;
   double scaleFactor = std::pow( 10.0, places );
-  return std::trunc( number * scaleFactor + 0.5 ) / scaleFactor;
+  return ( std::round( number * m * scaleFactor ) / scaleFactor ) * m;
 }
 
 
@@ -444,9 +470,22 @@ CORE_EXPORT qlonglong qgsPermissiveToLongLong( QString string, bool &ok );
  * Compares two QVariant values and returns whether the first is less than the second.
  * Useful for sorting lists of variants, correctly handling sorting of the various
  * QVariant data types (such as strings, numeric values, dates and times)
+ *
+ * Invalid < NULL < Values
+ *
  * \see qgsVariantGreaterThan()
  */
 CORE_EXPORT bool qgsVariantLessThan( const QVariant &lhs, const QVariant &rhs );
+
+/**
+ * Compares two QVariant values and returns whether they are equal, NULL values are treated as equal.
+ *
+ * \param lhs first value
+ * \param rhs second value
+ * \return true if values are equal
+ */
+CORE_EXPORT bool qgsVariantEqual( const QVariant &lhs, const QVariant &rhs );
+
 
 /**
  * Compares two QVariant values and returns whether the first is greater than the second.

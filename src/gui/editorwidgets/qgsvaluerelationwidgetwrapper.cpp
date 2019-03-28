@@ -179,7 +179,19 @@ void QgsValueRelationWidgetWrapper::setValue( const QVariant &value )
   }
   else if ( mComboBox )
   {
-    mComboBox->setCurrentIndex( mComboBox->findData( value ) );
+    // findData fails to tell a 0 from a NULL
+    // See: "Value relation, value 0 = NULL" - https://issues.qgis.org/issues/19981
+    int idx = -1; // default to not found
+    for ( int i = 0; i < mComboBox->count(); i++ )
+    {
+      QVariant v( mComboBox->itemData( i ) );
+      if ( qgsVariantEqual( v, value ) )
+      {
+        idx = i;
+        break;
+      }
+    }
+    mComboBox->setCurrentIndex( idx );
   }
   else if ( mLineEdit )
   {
@@ -200,6 +212,7 @@ void QgsValueRelationWidgetWrapper::widgetValueChanged( const QString &attribute
   // Do nothing if the value has not changed
   if ( attributeChanged )
   {
+    QVariant oldValue( value( ) );
     setFormFeatureAttribute( attribute, newValue );
     // Update combos if the value used in the filter expression has changed
     if ( QgsValueRelationFieldFormatter::expressionRequiresFormScope( mExpression )
@@ -208,6 +221,15 @@ void QgsValueRelationWidgetWrapper::widgetValueChanged( const QString &attribute
       populate();
       // Restore value
       setValue( value( ) );
+      // If the value has changed as a result of another widget's value change,
+      // we need to emit the signal to make sure other dependent widgets are
+      // updated.
+      if ( oldValue != value() && fieldIdx() < formFeature().fields().count() )
+      {
+        QString attributeName( formFeature().fields().names().at( fieldIdx() ) );
+        setFormFeatureAttribute( attributeName, value( ) );
+        emitValueChanged( );
+      }
     }
   }
 }

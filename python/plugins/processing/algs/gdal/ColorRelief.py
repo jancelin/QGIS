@@ -62,6 +62,7 @@ class ColorRelief(GdalAlgorithm):
                                                             self.tr('Input layer')))
         self.addParameter(QgsProcessingParameterBand(self.BAND,
                                                      self.tr('Band number'),
+                                                     1,
                                                      parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterBoolean(self.COMPUTE_EDGES,
                                                         self.tr('Compute edges'),
@@ -110,6 +111,7 @@ class ColorRelief(GdalAlgorithm):
         arguments.append(self.parameterAsFile(parameters, self.COLOR_TABLE, context))
 
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         arguments.append(out)
 
         arguments.append('-of')

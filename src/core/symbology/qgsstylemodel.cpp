@@ -57,8 +57,8 @@ QVariant QgsStyleModel::data( const QModelIndex &index, int role ) const
 
   const bool isColorRamp = index.row() >= mStyle->symbolCount();
   const QString name = !isColorRamp
-                       ? mSymbolNames.at( index.row() )
-                       : mRampNames.at( index.row() - mSymbolNames.size() );
+                       ? mSymbolNames.value( index.row() )
+                       : mRampNames.value( index.row() - mSymbolNames.size() );
 
   switch ( role )
   {
@@ -71,8 +71,30 @@ QVariant QgsStyleModel::data( const QModelIndex &index, int role ) const
         case Name:
         {
           const QStringList tags = mStyle->tagsOfSymbol( isColorRamp ? QgsStyle::ColorrampEntity : QgsStyle::SymbolEntity, name );
-          return role != Qt::ToolTipRole ? name
-                 : QStringLiteral( "<b>%1</b><br><i>%2</i>" ).arg( name, tags.count() > 0 ? tags.join( QStringLiteral( ", " ) ) : tr( "Not tagged" ) );
+
+          if ( role == Qt::ToolTipRole )
+          {
+            QString tooltip = QStringLiteral( "<h3>%1</h3><p><i>%2</i>" ).arg( name,
+                              tags.count() > 0 ? tags.join( QStringLiteral( ", " ) ) : tr( "Not tagged" ) );
+
+            // create very large preview image
+            std::unique_ptr< QgsSymbol > symbol( mStyle->symbol( name ) );
+            if ( symbol )
+            {
+              int width = static_cast< int >( Qgis::UI_SCALE_FACTOR * QFontMetrics( data( index, Qt::FontRole ).value< QFont >() ).width( 'X' ) * 23 );
+              int height = static_cast< int >( width / 1.61803398875 ); // golden ratio
+              QPixmap pm = QgsSymbolLayerUtils::symbolPreviewPixmap( symbol.get(), QSize( width, height ), height / 20 );
+              QByteArray data;
+              QBuffer buffer( &data );
+              pm.save( &buffer, "PNG", 100 );
+              tooltip += QStringLiteral( "<p><img src='data:image/png;base64, %3'>" ).arg( QString( data.toBase64() ) );
+            }
+            return tooltip;
+          }
+          else
+          {
+            return name;
+          }
         }
         case Tags:
           return mStyle->tagsOfSymbol( isColorRamp ? QgsStyle::ColorrampEntity : QgsStyle::SymbolEntity, name ).join( QStringLiteral( ", " ) );
@@ -95,15 +117,18 @@ QVariant QgsStyleModel::data( const QModelIndex &index, int role ) const
               return icon;
 
             std::unique_ptr< QgsSymbol > symbol( mStyle->symbol( name ) );
-            if ( mAdditionalSizes.isEmpty() )
-              icon.addPixmap( QgsSymbolLayerUtils::symbolPreviewPixmap( symbol.get(), QSize( 24, 24 ), 1 ) );
-
-            for ( const QVariant &size : mAdditionalSizes )
+            if ( symbol )
             {
-              QSize s = size.toSize();
-              icon.addPixmap( QgsSymbolLayerUtils::symbolPreviewPixmap( symbol.get(), s, static_cast< int >( s.width() * ICON_PADDING_FACTOR ) ) );
-            }
+              if ( mAdditionalSizes.isEmpty() )
+                icon.addPixmap( QgsSymbolLayerUtils::symbolPreviewPixmap( symbol.get(), QSize( 24, 24 ), 1 ) );
 
+              for ( const QVariant &size : mAdditionalSizes )
+              {
+                QSize s = size.toSize();
+                icon.addPixmap( QgsSymbolLayerUtils::symbolPreviewPixmap( symbol.get(), s, static_cast< int >( s.width() * ICON_PADDING_FACTOR ) ) );
+              }
+
+            }
             mSymbolIconCache.insert( name, icon );
             return icon;
           }
@@ -115,14 +140,17 @@ QVariant QgsStyleModel::data( const QModelIndex &index, int role ) const
               return icon;
 
             std::unique_ptr< QgsColorRamp > ramp( mStyle->colorRamp( name ) );
-            if ( mAdditionalSizes.isEmpty() )
-              icon.addPixmap( QgsSymbolLayerUtils::colorRampPreviewPixmap( ramp.get(), QSize( 24, 24 ), 1 ) );
-            for ( const QVariant &size : mAdditionalSizes )
+            if ( ramp )
             {
-              QSize s = size.toSize();
-              icon.addPixmap( QgsSymbolLayerUtils::colorRampPreviewPixmap( ramp.get(), s, static_cast< int >( s.width() * ICON_PADDING_FACTOR ) ) );
-            }
+              if ( mAdditionalSizes.isEmpty() )
+                icon.addPixmap( QgsSymbolLayerUtils::colorRampPreviewPixmap( ramp.get(), QSize( 24, 24 ), 1 ) );
+              for ( const QVariant &size : mAdditionalSizes )
+              {
+                QSize s = size.toSize();
+                icon.addPixmap( QgsSymbolLayerUtils::colorRampPreviewPixmap( ramp.get(), s, static_cast< int >( s.width() * ICON_PADDING_FACTOR ) ) );
+              }
 
+            }
             mColorRampIconCache.insert( name, icon );
             return icon;
           }
@@ -165,8 +193,8 @@ bool QgsStyleModel::setData( const QModelIndex &index, const QVariant &value, in
     {
       const bool isColorRamp = index.row() >= mStyle->symbolCount();
       const QString name = !isColorRamp
-                           ? mSymbolNames.at( index.row() )
-                           : mRampNames.at( index.row() - mSymbolNames.size() );
+                           ? mSymbolNames.value( index.row() )
+                           : mRampNames.value( index.row() - mSymbolNames.size() );
       const QString newName = value.toString();
 
       return isColorRamp

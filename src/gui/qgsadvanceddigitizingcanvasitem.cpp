@@ -28,6 +28,7 @@ QgsAdvancedDigitizingCanvasItem::QgsAdvancedDigitizingCanvasItem( QgsMapCanvas *
   , mSnapPen( QPen( QColor( 127, 0, 0, 150 ), 1 ) )
   , mSnapLinePen( QPen( QColor( 127, 0, 0, 150 ), 1, Qt::DashLine ) )
   , mCursorPen( QPen( QColor( 127, 127, 127, 255 ), 1 ) )
+  , mSnapIndicator( qgis::make_unique< QgsSnapIndicator>( canvas ) )
   , mAdvancedDigitizingDockWidget( cadDockWidget )
 {
 }
@@ -79,7 +80,7 @@ void QgsAdvancedDigitizingCanvasItem::paint( QPainter *painter )
     snapSegmentPix2 = toCanvasCoordinates( snappedSegment[1] );
   }
 
-  painter->setRenderHints( QPainter::Antialiasing );
+  painter->setRenderHint( QPainter::Antialiasing );
   painter->setCompositionMode( QPainter::CompositionMode_Difference );
 
   // Draw point snap
@@ -208,10 +209,8 @@ void QgsAdvancedDigitizingCanvasItem::paint( QPainter *painter )
     }
     if ( draw )
     {
-      painter->drawLine( 0,
-                         y,
-                         boundingRect().width(),
-                         y );
+      painter->drawLine( QPointF( 0, y ),
+                         QPointF( boundingRect().width(), y ) );
     }
   }
 
@@ -238,7 +237,16 @@ void QgsAdvancedDigitizingCanvasItem::paint( QPainter *painter )
                        curPointPix + QPointF( +5, +5 ) );
     painter->drawLine( curPointPix + QPointF( -5, +5 ),
                        curPointPix + QPointF( +5, -5 ) );
-
   }
+
+
+  QgsPointLocator::Match match = mAdvancedDigitizingDockWidget->mapPointMatch();
+  if ( match.isValid() )
+  {
+    mSnapIndicator->setMatch( match );
+    mSnapIndicator->setVisible( true );
+  }
+  else
+    mSnapIndicator->setVisible( false );
 
 }

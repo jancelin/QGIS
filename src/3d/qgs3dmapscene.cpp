@@ -17,7 +17,11 @@
 
 #include <Qt3DRender/QCamera>
 #include <Qt3DRender/QMesh>
+#include <Qt3DRender/QObjectPicker>
+#include <Qt3DRender/QPickEvent>
 #include <Qt3DRender/QPickingSettings>
+#include <Qt3DRender/QPickTriangleEvent>
+#include <Qt3DRender/QPointLight>
 #include <Qt3DRender/QRenderSettings>
 #include <Qt3DRender/QSceneLoader>
 #include <Qt3DExtras/QForwardRenderer>
@@ -188,7 +192,7 @@ void Qgs3DMapScene::registerPickHandler( Qgs3DMapScenePickHandler *pickHandler )
     {
       Qt3DRender::QObjectPicker *picker = new Qt3DRender::QObjectPicker( entity );
       entity->addComponent( picker );
-      connect( picker, &Qt3DRender::QObjectPicker::pressed, this, &Qgs3DMapScene::onLayerEntityPickEvent );
+      connect( picker, &Qt3DRender::QObjectPicker::clicked, this, &Qgs3DMapScene::onLayerEntityPickEvent );
     }
   }
 
@@ -361,6 +365,8 @@ void Qgs3DMapScene::createTerrain()
 
     mTerrain->deleteLater();
     mTerrain = nullptr;
+
+    emit terrainEntityChanged();
   }
 
   if ( !mTerrainUpdateScheduled )
@@ -446,7 +452,7 @@ void Qgs3DMapScene::onLayerEntityPickEvent( Qt3DRender::QPickEvent *event )
       // unfortunately we can't access which sub-entity triggered the pick event
       // so as a temporary workaround let's just ignore the entity with selection
       // and hope the event was the main entity (QTBUG-58206)
-      if ( geomRenderer->objectName() != "main" )
+      if ( geomRenderer->objectName() != QLatin1String( "main" ) )
         continue;
 
       if ( QgsTessellatedPolygonGeometry *g = qobject_cast<QgsTessellatedPolygonGeometry *>( geomRenderer->geometry() ) )
@@ -510,7 +516,7 @@ void Qgs3DMapScene::addLayerEntity( QgsMapLayer *layer )
     // This is a bit of a hack and it should be handled in QgsMapLayer::setRenderer3D() but in qgis_core
     // the vector layer 3D renderer class is not available. Maybe we need an intermediate map layer 3D renderer
     // class in qgis_core that can be used to handle this case nicely.
-    if ( layer->type() == QgsMapLayer::VectorLayer && renderer->type() == "vector" )
+    if ( layer->type() == QgsMapLayer::VectorLayer && renderer->type() == QLatin1String( "vector" ) )
     {
       static_cast<QgsVectorLayer3DRenderer *>( renderer )->setLayer( static_cast<QgsVectorLayer *>( layer ) );
     }

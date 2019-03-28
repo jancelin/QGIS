@@ -57,6 +57,7 @@ class pct2rgb(GdalAlgorithm):
         self.addParameter(QgsProcessingParameterRasterLayer(self.INPUT, self.tr('Input layer')))
         self.addParameter(QgsProcessingParameterBand(self.BAND,
                                                      self.tr('Band number'),
+                                                     1,
                                                      parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterBoolean(self.RGBA,
                                                         self.tr('Generate a RGBA file'),
@@ -90,6 +91,7 @@ class pct2rgb(GdalAlgorithm):
         arguments.append(inLayer.source())
 
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         arguments.append(out)
 
         arguments.append('-of')
@@ -101,11 +103,11 @@ class pct2rgb(GdalAlgorithm):
         if self.parameterAsBool(parameters, self.RGBA, context):
             arguments.append('-rgba')
 
-        commands = []
         if isWindows():
-            commands = ['cmd.exe', '/C ', self.commandName() + '.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
+            commands = ["python3", "-m", self.commandName()]
         else:
-            commands = [self.commandName() + '.py', GdalUtils.escapeAndJoin(arguments)]
+            commands = [self.commandName() + '.py']
+
+        commands.append(GdalUtils.escapeAndJoin(arguments))
 
         return commands

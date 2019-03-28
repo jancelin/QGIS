@@ -53,10 +53,7 @@ static bool _initRenderer( const QString &name, QgsRendererWidgetFunc f, const Q
 
   if ( !iconName.isEmpty() )
   {
-    QString iconPath = QgsApplication::defaultThemePath() + iconName;
-    QPixmap pix;
-    if ( pix.load( iconPath ) )
-      m->setIcon( pix );
+    m->setIcon( QgsApplication::getThemeIcon( iconName ) );
   }
 
   QgsDebugMsg( "Set for " + name );
@@ -209,7 +206,7 @@ void QgsRendererPropertiesDialog::rendererChanged()
 {
   if ( cboRenderers->currentIndex() == -1 )
   {
-    QgsDebugMsg( "No current item -- this should never happen!" );
+    QgsDebugMsg( QStringLiteral( "No current item -- this should never happen!" ) );
     return;
   }
 
@@ -305,15 +302,15 @@ void QgsRendererPropertiesDialog::onOK()
 
 void QgsRendererPropertiesDialog::openPanel( QgsPanelWidget *panel )
 {
-  QgsDebugMsg( "Open panel!!!" );
+  QgsDebugMsg( QStringLiteral( "Open panel!!!" ) );
   if ( mDockMode )
   {
-    QgsDebugMsg( "DOCK MODE" );
+    QgsDebugMsg( QStringLiteral( "DOCK MODE" ) );
     emit showPanel( panel );
   }
   else
   {
-    QgsDebugMsg( "DIALOG MODE" );
+    QgsDebugMsg( QStringLiteral( "DIALOG MODE" ) );
     // Show the dialog version if no one is connected
     QDialog *dlg = new QDialog();
     QString key = QStringLiteral( "/UI/paneldialog/%1" ).arg( panel->panelTitle() );

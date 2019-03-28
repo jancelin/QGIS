@@ -77,8 +77,8 @@ MACRO (CHECK_GRASS G_PREFIX)
           # and then again with no specified paths to search the default
           # locations. When an earlier FIND_* succeeds, subsequent FIND_*s
           # searching for the same item do nothing. 
-          FIND_LIBRARY(LIB_PATH NAMES grass_${LIB} PATHS ${G_PREFIX}/lib NO_DEFAULT_PATH)
-          FIND_LIBRARY(LIB_PATH NAMES grass_${LIB} PATHS ${G_PREFIX}/lib)
+          FIND_LIBRARY(LIB_PATH NAMES grass_${LIB} grass_${LIB}.${GRASS_MAJOR_VERSION${GRASS_FIND_VERSION}}.${GRASS_MINOR_VERSION${GRASS_FIND_VERSION}} PATHS ${G_PREFIX}/lib NO_DEFAULT_PATH)
+          FIND_LIBRARY(LIB_PATH NAMES grass_${LIB} grass_${LIB}.${GRASS_MAJOR_VERSION${GRASS_FIND_VERSION}}.${GRASS_MINOR_VERSION${GRASS_FIND_VERSION}} PATHS ${G_PREFIX}/lib)
 
           IF(LIB_PATH)
             SET(GRASS_LIBRARY${GRASS_FIND_VERSION}_${LIB} ${LIB_PATH})
@@ -167,7 +167,7 @@ IF (UNIX)
         ENDFOREACH(VERSION_MINOR)
     ELSE (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
         FOREACH (PATH /usr/lib64 /usr/lib)
-            FOREACH (VERSION grass70, grass72, grass74)
+            FOREACH (VERSION grass76, grass74, grass72, grass70)
                 LIST(APPEND GRASS_PATHS "${PATH}/${VERSION}")
             ENDFOREACH (VERSION)
         ENDFOREACH (PATH)
@@ -178,10 +178,10 @@ ENDIF (UNIX)
 IF (APPLE)
   IF (GRASS_FIND_VERSION EQUAL 7)
     LIST(APPEND GRASS_PATHS
-      /Applications/GRASS-7.0.app/Contents/MacOS
-      /Applications/GRASS-7.1.app/Contents/MacOS
-      /Applications/GRASS-7.2.app/Contents/MacOS
+      /Applications/GRASS-7.6.app/Contents/MacOS
       /Applications/GRASS-7.4.app/Contents/MacOS
+      /Applications/GRASS-7.2.app/Contents/MacOS
+      /Applications/GRASS-7.0.app/Contents/MacOS
     )
   ENDIF ()
   LIST(APPEND GRASS_PATHS /Applications/GRASS.app/Contents/Resources)

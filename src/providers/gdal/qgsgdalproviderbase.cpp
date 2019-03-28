@@ -42,7 +42,7 @@ QList<QgsColorRampShader::ColorRampItem> QgsGdalProviderBase::colorTable( GDALDa
   //Invalid band number, segfault prevention
   if ( 0 >= bandNumber )
   {
-    QgsDebugMsg( "Invalid parameter" );
+    QgsDebugMsg( QStringLiteral( "Invalid parameter" ) );
     return ct;
   }
 
@@ -51,7 +51,7 @@ QList<QgsColorRampShader::ColorRampItem> QgsGdalProviderBase::colorTable( GDALDa
 
   if ( myGdalColorTable )
   {
-    QgsDebugMsg( "Color table found" );
+    QgsDebugMsg( QStringLiteral( "Color table found" ) );
 
     // load category labels
     char **categoryNames = GDALGetRasterCategoryNames( myGdalBand );
@@ -123,7 +123,7 @@ QList<QgsColorRampShader::ColorRampItem> QgsGdalProviderBase::colorTable( GDALDa
         }
         else
         {
-          QgsDebugMsg( "Color interpretation type not supported yet" );
+          QgsDebugMsg( QStringLiteral( "Color interpretation type not supported yet" ) );
           return ct;
         }
       }
@@ -135,7 +135,7 @@ QList<QgsColorRampShader::ColorRampItem> QgsGdalProviderBase::colorTable( GDALDa
     return ct;
   }
 
-  QgsDebugMsg( "Color table loaded successfully" );
+  QgsDebugMsg( QStringLiteral( "Color table loaded successfully" ) );
   return ct;
 }
 
@@ -281,10 +281,10 @@ CPLErr QgsGdalProviderBase::gdalRasterIO( GDALRasterBandH hBand, GDALRWFlag eRWF
   INIT_RASTERIO_EXTRA_ARG( extra );
   if ( false && feedback )  // disabled!
   {
-    // Currently the cancelation is disabled... When RasterIO call is canceled,
+    // Currently the cancellation is disabled... When RasterIO call is canceled,
     // GDAL returns CE_Failure with error code = 0 (CPLE_None), however one would
     // expect to get CPLE_UserInterrupt to clearly identify that the failure was
-    // caused by the cancelation and not that something dodgy is going on.
+    // caused by the cancellation and not that something dodgy is going on.
     // Are both error codes acceptable?
     extra.pfnProgress = _gdalProgressFnWithFeedback;
     extra.pProgressData = ( void * ) feedback;

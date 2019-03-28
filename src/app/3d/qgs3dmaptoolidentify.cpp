@@ -19,6 +19,7 @@
 #include "qgs3dmapscene.h"
 #include "qgs3dutils.h"
 #include "qgsterrainentity_p.h"
+#include "qgsvector3d.h"
 
 #include "qgisapp.h"
 #include "qgsmapcanvas.h"
@@ -42,7 +43,9 @@ class Qgs3DMapToolIdentifyPickHandler : public Qgs3DMapScenePickHandler
 
 void Qgs3DMapToolIdentifyPickHandler::handlePickOnVectorLayer( QgsVectorLayer *vlayer, QgsFeatureId id, const QVector3D &worldIntersection )
 {
-  QgsVector3D mapCoords = Qgs3DUtils::worldToMapCoordinates( worldIntersection, mIdentifyTool->mCanvas->map()->origin() );
+  QgsVector3D mapCoords = Qgs3DUtils::worldToMapCoordinates( QgsVector3D( worldIntersection.x(),
+                          worldIntersection.y(),
+                          worldIntersection.z() ), mIdentifyTool->mCanvas->map()->origin() );
   QgsPoint pt( mapCoords.x(), mapCoords.y(), mapCoords.z() );
 
   QgsMapToolIdentifyAction *identifyTool2D = QgisApp::instance()->identifyMapTool();
@@ -74,16 +77,20 @@ void Qgs3DMapToolIdentify::mousePressEvent( QMouseEvent *event )
 
 void Qgs3DMapToolIdentify::activate()
 {
-  Qt3DRender::QObjectPicker *picker = mCanvas->scene()->terrainEntity()->terrainPicker();
-  connect( picker, &Qt3DRender::QObjectPicker::pressed, this, &Qgs3DMapToolIdentify::onTerrainPicked );
+  if ( QgsTerrainEntity *terrainEntity = mCanvas->scene()->terrainEntity() )
+  {
+    connect( terrainEntity->terrainPicker(), &Qt3DRender::QObjectPicker::clicked, this, &Qgs3DMapToolIdentify::onTerrainPicked );
+  }
 
   mCanvas->scene()->registerPickHandler( mPickHandler.get() );
 }
 
 void Qgs3DMapToolIdentify::deactivate()
 {
-  Qt3DRender::QObjectPicker *picker = mCanvas->scene()->terrainEntity()->terrainPicker();
-  disconnect( picker, &Qt3DRender::QObjectPicker::pressed, this, &Qgs3DMapToolIdentify::onTerrainPicked );
+  if ( QgsTerrainEntity *terrainEntity = mCanvas->scene()->terrainEntity() )
+  {
+    disconnect( terrainEntity->terrainPicker(), &Qt3DRender::QObjectPicker::clicked, this, &Qgs3DMapToolIdentify::onTerrainPicked );
+  }
 
   mCanvas->scene()->unregisterPickHandler( mPickHandler.get() );
 }
@@ -93,7 +100,10 @@ void Qgs3DMapToolIdentify::onTerrainPicked( Qt3DRender::QPickEvent *event )
   if ( event->button() != Qt3DRender::QPickEvent::LeftButton )
     return;
 
-  QgsVector3D mapCoords = Qgs3DUtils::worldToMapCoordinates( event->worldIntersection(), mCanvas->map()->origin() );
+  const QVector3D worldIntersection = event->worldIntersection();
+  QgsVector3D mapCoords = Qgs3DUtils::worldToMapCoordinates( QgsVector3D( worldIntersection.x(),
+                          worldIntersection.y(),
+                          worldIntersection.z() ), mCanvas->map()->origin() );
   QgsPointXY mapPoint( mapCoords.x(), mapCoords.y() );
 
   // estimate search radius
@@ -131,6 +141,8 @@ void Qgs3DMapToolIdentify::onTerrainEntityChanged()
 {
   // no need to disconnect from the previous entity: it has been destroyed
   // start listening to the new terrain entity
-  Qt3DRender::QObjectPicker *picker = mCanvas->scene()->terrainEntity()->terrainPicker();
-  connect( picker, &Qt3DRender::QObjectPicker::pressed, this, &Qgs3DMapToolIdentify::onTerrainPicked );
+  if ( QgsTerrainEntity *terrainEntity = mCanvas->scene()->terrainEntity() )
+  {
+    connect( terrainEntity->terrainPicker(), &Qt3DRender::QObjectPicker::clicked, this, &Qgs3DMapToolIdentify::onTerrainPicked );
+  }
 }

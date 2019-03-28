@@ -102,6 +102,7 @@ QgsVectorFileWriter::QgsVectorFileWriter(
   const QStringList &layerOptions,
   QString *newFilename,
   SymbologyExport symbologyExport,
+  QgsFeatureSink::SinkFlags sinkFlags,
   QString *newLayer
 )
   : mError( NoError )
@@ -111,7 +112,7 @@ QgsVectorFileWriter::QgsVectorFileWriter(
 {
   init( vectorFileName, fileEncoding, fields,  geometryType,
         srs, driverName, datasourceOptions, layerOptions, newFilename, nullptr,
-        QString(), CreateOrOverwriteFile, newLayer );
+        QString(), CreateOrOverwriteFile, newLayer, sinkFlags );
 }
 
 QgsVectorFileWriter::QgsVectorFileWriter( const QString &vectorFileName,
@@ -135,7 +136,7 @@ QgsVectorFileWriter::QgsVectorFileWriter( const QString &vectorFileName,
 {
   init( vectorFileName, fileEncoding, fields, geometryType, srs, driverName,
         datasourceOptions, layerOptions, newFilename, fieldValueConverter,
-        layerName, action, newLayer );
+        layerName, action, newLayer, nullptr );
 }
 
 bool QgsVectorFileWriter::supportsFeatureStyles( const QString &driverName )
@@ -171,7 +172,7 @@ void QgsVectorFileWriter::init( QString vectorFileName,
                                 FieldValueConverter *fieldValueConverter,
                                 const QString &layerNameIn,
                                 ActionOnExistingFile action,
-                                QString *newLayer )
+                                QString *newLayer, SinkFlags sinkFlags )
 {
   mRenderContext.setRendererScale( mSymbologyScale );
 
@@ -293,7 +294,7 @@ void QgsVectorFileWriter::init( QString vectorFileName,
   {
     if ( fileEncoding.compare( metadata.compulsoryEncoding, Qt::CaseInsensitive ) != 0 )
     {
-      QgsDebugMsg( QString( "forced %1 encoding for %2" ).arg( metadata.compulsoryEncoding, driverName ) );
+      QgsDebugMsg( QStringLiteral( "forced %1 encoding for %2" ).arg( metadata.compulsoryEncoding, driverName ) );
       fileEncoding = metadata.compulsoryEncoding;
     }
 
@@ -305,11 +306,12 @@ void QgsVectorFileWriter::init( QString vectorFileName,
     options = new char *[ datasourceOptions.size() + 1 ];
     for ( int i = 0; i < datasourceOptions.size(); i++ )
     {
-      QgsDebugMsg( QString( "-dsco=%1" ).arg( datasourceOptions[i] ) );
+      QgsDebugMsg( QStringLiteral( "-dsco=%1" ).arg( datasourceOptions[i] ) );
       options[i] = CPLStrdup( datasourceOptions[i].toLocal8Bit().constData() );
     }
     options[ datasourceOptions.size()] = nullptr;
   }
+  mAttrIdxToOgrIdx.remove( 0 );
 
   // create the data source
   if ( action == CreateOrOverwriteFile )
@@ -363,11 +365,11 @@ void QgsVectorFileWriter::init( QString vectorFileName,
 
   if ( action == CreateOrOverwriteFile )
   {
-    QgsDebugMsg( "Created data source" );
+    QgsDebugMsg( QStringLiteral( "Created data source" ) );
   }
   else
   {
-    QgsDebugMsg( "Opened data source in update mode" );
+    QgsDebugMsg( QStringLiteral( "Opened data source in update mode" ) );
   }
 
   // use appropriate codec
@@ -410,7 +412,7 @@ void QgsVectorFileWriter::init( QString vectorFileName,
     options = new char *[ layerOptions.size() + 1 ];
     for ( int i = 0; i < layerOptions.size(); i++ )
     {
-      QgsDebugMsg( QString( "-lco=%1" ).arg( layerOptions[i] ) );
+      QgsDebugMsg( QStringLiteral( "-lco=%1" ).arg( layerOptions[i] ) );
       options[i] = CPLStrdup( layerOptions[i].toLocal8Bit().constData() );
     }
     options[ layerOptions.size()] = nullptr;
@@ -481,7 +483,7 @@ void QgsVectorFileWriter::init( QString vectorFileName,
 
   OGRFeatureDefnH defn = OGR_L_GetLayerDefn( mLayer );
 
-  QgsDebugMsg( "created layer" );
+  QgsDebugMsg( QStringLiteral( "created layer" ) );
 
   // create the fields
   QgsDebugMsg( "creating " + QString::number( fields.size() ) + " fields" );
@@ -654,7 +656,7 @@ void QgsVectorFileWriter::init( QString vectorFileName,
     }
 
     int ogrIdx = OGR_FD_GetFieldIndex( defn, mCodec->fromUnicode( name ) );
-    QgsDebugMsg( QString( "returned field index for %1: %2" ).arg( name ).arg( ogrIdx ) );
+    QgsDebugMsg( QStringLiteral( "returned field index for %1: %2" ).arg( name ).arg( ogrIdx ) );
     if ( ogrIdx < 0 || existingIdxs.contains( ogrIdx ) )
     {
       // GDAL 1.7 not just truncates, but launders more aggressivly.
@@ -687,7 +689,17 @@ void QgsVectorFileWriter::init( QString vectorFileName,
     }
   }
 
-  QgsDebugMsg( "Done creating fields" );
+  // Geopackages require a unique feature id. If the input feature stream cannot guarantee
+  // the uniqueness of the FID column, we drop it and let OGR generate new ones
+  if ( sinkFlags.testFlag( QgsFeatureSink::RegeneratePrimaryKey ) && driverName == QLatin1String( "GPKG" ) )
+  {
+    int fidIdx = fields.lookupField( QStringLiteral( "FID" ) );
+
+    if ( fidIdx >= 0 )
+      mAttrIdxToOgrIdx.remove( fidIdx );
+  }
+
+  QgsDebugMsg( QStringLiteral( "Done creating fields" ) );
 
   mWkbType = geometryType;
 
@@ -842,6 +854,17 @@ class QgsVectorFileWriterMetadataContainer
                              << QStringLiteral( "TAB" ),
                              QStringLiteral( "COMMA" ) // Default value
                            ) );
+
+#if defined(GDAL_COMPUTE_VERSION) && GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(2,3,0)
+      layerOptions.insert( QStringLiteral( "STRING_QUOTING" ), new QgsVectorFileWriter::SetOption(
+                             QObject::tr( "Double-quote strings. IF_AMBIGUOUS means that string values that look like numbers will be quoted." ),
+                             QStringList()
+                             << QStringLiteral( "IF_NEEDED" )
+                             << QStringLiteral( "IF_AMBIGUOUS" )
+                             << QStringLiteral( "ALWAYS" ),
+                             QStringLiteral( "IF_AMBIGUOUS" ) // Default value
+                           ) );
+#endif
 
       layerOptions.insert( QStringLiteral( "WRITE_BOM" ), new QgsVectorFileWriter::BoolOption(
                              QObject::tr( "Write a UTF-8 Byte Order Mark (BOM) at the start of the file." ),
@@ -2080,11 +2103,11 @@ gdal::ogr_feature_unique_ptr QgsVectorFileWriter::createFeature( const QgsFeatur
   qint64 fid = FID_TO_NUMBER( feature.id() );
   if ( fid > std::numeric_limits<int>::max() )
   {
-    QgsDebugMsg( QString( "feature id %1 too large." ).arg( fid ) );
+    QgsDebugMsg( QStringLiteral( "feature id %1 too large." ).arg( fid ) );
     OGRErr err = OGR_F_SetFID( poFeature.get(), static_cast<long>( fid ) );
     if ( err != OGRERR_NONE )
     {
-      QgsDebugMsg( QString( "Failed to set feature id to %1: %2 (OGR error: %3)" )
+      QgsDebugMsg( QStringLiteral( "Failed to set feature id to %1: %2 (OGR error: %3)" )
                    .arg( feature.id() )
                    .arg( err ).arg( CPLGetLastErrorMsg() )
                  );
@@ -2225,6 +2248,19 @@ gdal::ogr_feature_unique_ptr QgsVectorFileWriter::createFeature( const QgsFeatur
           }
         }
 
+        // drop m/z value if not present in output wkb type
+        if ( !QgsWkbTypes::hasZ( mWkbType ) && QgsWkbTypes::hasZ( geom.wkbType() ) )
+          geom.get()->dropZValue();
+        if ( !QgsWkbTypes::hasM( mWkbType ) && QgsWkbTypes::hasM( geom.wkbType() ) )
+          geom.get()->dropMValue();
+
+        // add m/z values if not present in the input wkb type -- this is needed for formats which determine
+        // geometry type based on features, e.g. geojson
+        if ( QgsWkbTypes::hasZ( mWkbType ) && !QgsWkbTypes::hasZ( geom.wkbType() ) )
+          geom.get()->addZValue( 0 );
+        if ( QgsWkbTypes::hasM( mWkbType ) && !QgsWkbTypes::hasM( geom.wkbType() ) )
+          geom.get()->addMValue( 0 );
+
         if ( !mGeom2 )
         {
           // there's a problem when layer type is set as wkbtype Polygon
@@ -2316,7 +2352,7 @@ QgsVectorFileWriter::~QgsVectorFileWriter()
   {
     if ( OGRERR_NONE != OGR_L_CommitTransaction( mLayer ) )
     {
-      QgsDebugMsg( "Error while committing transaction on OGRLayer." );
+      QgsDebugMsg( QStringLiteral( "Error while committing transaction on OGRLayer." ) );
     }
   }
 
@@ -2443,7 +2479,7 @@ QgsVectorFileWriter::WriterError QgsVectorFileWriter::prepareWriteAsVectorFormat
     {
       req.setFilterFids( details.selectedFeatureIds );
     }
-    req.setSubsetOfAttributes( QgsAttributeList() );
+    req.setNoAttributes();
     details.geometryTypeScanIterator = layer->getFeatures( req );
   }
 
@@ -2807,7 +2843,7 @@ bool QgsVectorFileWriter::deleteShapeFile( const QString &fileName )
     QFile f( dir.canonicalPath() + '/' + file );
     if ( !f.remove() )
     {
-      QgsDebugMsg( QString( "Removing file %1 failed: %2" ).arg( file, f.errorString() ) );
+      QgsDebugMsg( QStringLiteral( "Removing file %1 failed: %2" ).arg( file, f.errorString() ) );
       ok = false;
     }
   }

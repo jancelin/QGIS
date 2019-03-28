@@ -18,6 +18,7 @@
 #include <QBoxLayout>
 #include <Qt3DExtras/Qt3DWindow>
 #include <Qt3DRender/QRenderCapture>
+#include <QMouseEvent>
 
 #include "qgscameracontroller.h"
 #include "qgs3dmapsettings.h"
@@ -124,7 +125,7 @@ void Qgs3DMapCanvas::setMapTool( Qgs3DMapTool *tool )
   else if ( !mMapTool && tool )
   {
     mEngine->window()->installEventFilter( this );
-    mScene->cameraController()->setEnabled( false );
+    mScene->cameraController()->setEnabled( tool->allowsCameraControls() );
     mEngine->window()->setCursor( tool->cursor() );
   }
 

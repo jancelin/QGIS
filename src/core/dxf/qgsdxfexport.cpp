@@ -356,7 +356,7 @@ const char *QgsDxfExport::DXF_ENCODINGS[][2] =
   { "ANSI_874", "CP874" },
   { "ANSI_932", "Shift_JIS" },
   { "ANSI_936", "CP936" },
-  { "ANSI_949", "cp949" },
+  { "ANSI_949", "CP949" },
   { "ANSI_950", "CP950" },
 //  { "ANSI_1361", "" },
 //  { "ANSI_1200", "" },
@@ -987,12 +987,12 @@ void QgsDxfExport::writeEntities()
     QgsMapLayerStyleOverride styleOverride( vl );
     if ( mMapSettings.layerStyleOverrides().contains( vl->id() ) )
     {
-      QgsDebugMsg( QString( "%1: apply override style" ).arg( vl->id() ) );
+      QgsDebugMsg( QStringLiteral( "%1: apply override style" ).arg( vl->id() ) );
       styleOverride.setOverrideStyle( mMapSettings.layerStyleOverrides().value( vl->id() ) );
     }
     else
     {
-      QgsDebugMsg( QString( "%1: not override style" ).arg( vl->id() ) );
+      QgsDebugMsg( QStringLiteral( "%1: no override style" ).arg( vl->id() ) );
     }
 
     if ( !vl->renderer() )
@@ -1072,6 +1072,10 @@ void QgsDxfExport::writeEntities()
       QString lName( dxfLayerName( attrIdx < 0 ? layerName( vl ) : fet.attribute( attrIdx ).toString() ) );
 
       sctx.setFeature( &fet );
+
+      if ( !renderer->willRenderFeature( fet, ctx ) )
+        continue;
+
       if ( mSymbologyExport == NoSymbology )
       {
         addFeature( sctx, ct, lName, nullptr, nullptr ); // no symbology at all
@@ -1226,7 +1230,7 @@ void QgsDxfExport::writeEntitiesSymbolLevels( QgsVectorLayer *layer )
       QHash< QgsSymbol *, QList<QgsFeature> >::iterator levelIt = features.find( item.symbol() );
       if ( levelIt == features.end() )
       {
-        QgsDebugMsg( QString( "No feature found for symbol on %1 %2.%3" ).arg( layer->id() ).arg( l ).arg( i ) );
+        QgsDebugMsg( QStringLiteral( "No feature found for symbol on %1 %2.%3" ).arg( layer->id() ).arg( l ).arg( i ) );
         continue;
       }
 
@@ -3473,21 +3477,22 @@ void QgsDxfExport::writePolyline( const QgsPointSequence &line, const QString &l
   int n = line.size();
   if ( n == 0 )
   {
-    QgsDebugMsg( QString( "writePolyline: empty line layer=%1 lineStyleName=%2" ).arg( layer, lineStyleName ) );
+    QgsDebugMsg( QStringLiteral( "writePolyline: empty line layer=%1 lineStyleName=%2" ).arg( layer, lineStyleName ) );
     return;
   }
 
-  bool polygon = line[0] == line[ line.size() - 1 ];
-  if ( polygon )
-    --n;
   if ( n < 2 )
   {
-    QgsDebugMsg( QString( "writePolyline: line too short layer=%1 lineStyleName=%2" ).arg( layer, lineStyleName ) );
+    QgsDebugMsg( QStringLiteral( "writePolyline: line too short layer=%1 lineStyleName=%2" ).arg( layer, lineStyleName ) );
     return;
   }
 
   if ( mForce2d || !line.at( 0 ).is3D() )
   {
+    bool polygon = line[0] == line[ line.size() - 1 ];
+    if ( polygon )
+      --n;
+
     writeGroup( 0, QStringLiteral( "LWPOLYLINE" ) );
     writeHandle();
     writeGroup( 8, layer );
@@ -3674,7 +3679,7 @@ void QgsDxfExport::writeMText( const QString &layer, const QString &text, const 
   if ( !mTextStream.codec()->canEncode( text ) )
   {
     // TODO return error
-    QgsDebugMsg( QString( "could not encode:%1" ).arg( text ) );
+    QgsDebugMsg( QStringLiteral( "could not encode:%1" ).arg( text ) );
     return;
   }
 
@@ -3971,7 +3976,7 @@ int QgsDxfExport::color_distance( QRgb p1, int index )
   double greenDiff = qGreen( p1 ) - sDxfColors[index][1];
   double blueDiff = qBlue( p1 ) - sDxfColors[index][2];
 #if 0
-  QgsDebugMsg( QString( "color_distance( r:%1 g:%2 b:%3 <=> i:%4 r:%5 g:%6 b:%7 ) => %8" )
+  QgsDebugMsg( QStringLiteral( "color_distance( r:%1 g:%2 b:%3 <=> i:%4 r:%5 g:%6 b:%7 ) => %8" )
                .arg( qRed( p1 ) ).arg( qGreen( p1 ) ).arg( qBlue( p1 ) )
                .arg( index )
                .arg( mDxfColors[index][0] )
@@ -4253,7 +4258,7 @@ bool QgsDxfExport::hasDataDefinedProperties( const QgsSymbolLayer *sl, const Qgs
     return true;
   }
 
-  return sl->dataDefinedProperties().hasActiveProperties();
+  return sl->hasDataDefinedProperties();
 }
 
 double QgsDxfExport::dashSize() const
@@ -4419,8 +4424,8 @@ void QgsDxfExport::drawLabel( const QString &layerId, QgsRenderContext &context,
 
   //font
   QFont dFont = lf->definedFont();
-  QgsDebugMsgLevel( QString( "PAL font tmpLyr: %1, Style: %2" ).arg( tmpLyr.format().font().toString(), tmpLyr.format().font().styleName() ), 4 );
-  QgsDebugMsgLevel( QString( "PAL font definedFont: %1, Style: %2" ).arg( dFont.toString(), dFont.styleName() ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "PAL font tmpLyr: %1, Style: %2" ).arg( tmpLyr.format().font().toString(), tmpLyr.format().font().styleName() ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "PAL font definedFont: %1, Style: %2" ).arg( dFont.toString(), dFont.styleName() ), 4 );
 
   QgsTextFormat format = tmpLyr.format();
   format.setFont( dFont );

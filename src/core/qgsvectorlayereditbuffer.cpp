@@ -49,7 +49,7 @@ bool QgsVectorLayerEditBuffer::isModified() const
 
 void QgsVectorLayerEditBuffer::undoIndexChanged( int index )
 {
-  QgsDebugMsgLevel( QString( "undo index changed %1" ).arg( index ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "undo index changed %1" ).arg( index ), 4 );
   Q_UNUSED( index );
   emit layerModified();
 }
@@ -62,16 +62,18 @@ void QgsVectorLayerEditBuffer::updateFields( QgsFields &fields )
   {
     fields.remove( mDeletedAttributeIds.at( i ) );
   }
-  // add new fields
-  for ( int i = 0; i < mAddedAttributes.count(); ++i )
-  {
-    fields.append( mAddedAttributes.at( i ), QgsFields::OriginEdit, i );
-  }
+
   // rename fields
   QgsFieldNameMap::const_iterator renameIt = mRenamedAttributes.constBegin();
   for ( ; renameIt != mRenamedAttributes.constEnd(); ++renameIt )
   {
-    fields[ renameIt.key()].setName( renameIt.value() );
+    fields.rename( renameIt.key(), renameIt.value() );
+  }
+
+  // add new fields
+  for ( int i = 0; i < mAddedAttributes.count(); ++i )
+  {
+    fields.append( mAddedAttributes.at( i ), QgsFields::OriginEdit, i );
   }
 }
 
@@ -147,7 +149,7 @@ bool QgsVectorLayerEditBuffer::deleteFeature( QgsFeatureId fid )
 {
   if ( !( L->dataProvider()->capabilities() & QgsVectorDataProvider::DeleteFeatures ) )
   {
-    QgsDebugMsg( "Cannot delete features (missing DeleteFeature capability)" );
+    QgsDebugMsg( QStringLiteral( "Cannot delete features (missing DeleteFeature capability)" ) );
     return false;
   }
 
@@ -155,7 +157,7 @@ bool QgsVectorLayerEditBuffer::deleteFeature( QgsFeatureId fid )
   {
     if ( !mAddedFeatures.contains( fid ) )
     {
-      QgsDebugMsg( "Cannot delete features (in the list of added features)" );
+      QgsDebugMsg( QStringLiteral( "Cannot delete features (in the list of added features)" ) );
       return false;
     }
   }
@@ -163,7 +165,7 @@ bool QgsVectorLayerEditBuffer::deleteFeature( QgsFeatureId fid )
   {
     if ( mDeletedFeatureIds.contains( fid ) )
     {
-      QgsDebugMsg( "Cannot delete features (in the list of deleted features)" );
+      QgsDebugMsg( QStringLiteral( "Cannot delete features (in the list of deleted features)" ) );
       return false;
     }
   }
@@ -176,7 +178,7 @@ bool QgsVectorLayerEditBuffer::deleteFeatures( const QgsFeatureIds &fids )
 {
   if ( !( L->dataProvider()->capabilities() & QgsVectorDataProvider::DeleteFeatures ) )
   {
-    QgsDebugMsg( "Cannot delete features (missing DeleteFeatures capability)" );
+    QgsDebugMsg( QStringLiteral( "Cannot delete features (missing DeleteFeatures capability)" ) );
     return false;
   }
 
@@ -413,6 +415,25 @@ bool QgsVectorLayerEditBuffer::commitChanges( QStringList &commitErrors )
     }
   }
 
+  // rename attributes
+  if ( !mRenamedAttributes.isEmpty() )
+  {
+    if ( ( cap & QgsVectorDataProvider::RenameAttributes ) && provider->renameAttributes( mRenamedAttributes ) )
+    {
+      commitErrors << tr( "SUCCESS: %n attribute(s) renamed.", "renamed attributes count", mRenamedAttributes.size() );
+
+      emit committedAttributesRenamed( L->id(), mRenamedAttributes );
+
+      mRenamedAttributes.clear();
+      attributesChanged = true;
+    }
+    else
+    {
+      commitErrors << tr( "ERROR: %n attribute(s) not renamed", "not renamed attributes count", mRenamedAttributes.size() );
+      success = false;
+    }
+  }
+
   //
   // add attributes
   //
@@ -438,25 +459,6 @@ bool QgsVectorLayerEditBuffer::commitChanges( QStringList &commitErrors )
       }
       commitErrors << list;
 #endif
-      success = false;
-    }
-  }
-
-  // rename attributes
-  if ( !mRenamedAttributes.isEmpty() )
-  {
-    if ( ( cap & QgsVectorDataProvider::RenameAttributes ) && provider->renameAttributes( mRenamedAttributes ) )
-    {
-      commitErrors << tr( "SUCCESS: %n attribute(s) renamed.", "renamed attributes count", mRenamedAttributes.size() );
-
-      emit committedAttributesRenamed( L->id(), mRenamedAttributes );
-
-      mRenamedAttributes.clear();
-      attributesChanged = true;
-    }
-    else
-    {
-      commitErrors << tr( "ERROR: %n attribute(s) not renamed", "not renamed attributes count", mRenamedAttributes.size() );
       success = false;
     }
   }

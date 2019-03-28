@@ -41,6 +41,8 @@ Constructor for QgsLayoutItemMap, with the specified parent ``layout``.
 
     virtual QIcon icon() const;
 
+    virtual QgsLayoutItem::Flags itemFlags() const;
+
 
     void assignFreeId();
 %Docstring
@@ -469,6 +471,12 @@ will be calculated. This can be expensive to calculate, so if they are not requi
 
     virtual void finalizeRestoreFromXml();
 
+
+    QList<QgsMapLayer *> layersToRender( const QgsExpressionContext *context = 0 ) const;
+%Docstring
+Returns a list of the layers which will be rendered within this map item, considering
+any locked layers, linked map theme, and data defined settings.
+%End
 
   protected:
 

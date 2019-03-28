@@ -47,6 +47,13 @@ class APP_EXPORT QgsRasterLayerProperties : public QgsOptionsDialogBase, private
 
   public:
 
+    enum StyleType
+    {
+      QML,
+      SLD
+    };
+    Q_ENUM( StyleType )
+
     /**
      * \brief Constructor
      * \param ml Map layer for which properties will be displayed
@@ -139,10 +146,6 @@ class APP_EXPORT QgsRasterLayerProperties : public QgsOptionsDialogBase, private
 
     void urlClicked( const QUrl &url );
 
-  signals:
-    //! Emitted when changes to layer were saved to update legend
-    void refreshLegend( const QString &layerID, bool expandItem );
-
   private:
     QPushButton *mBtnStyle = nullptr;
     QPushButton *mBtnMetadata = nullptr;
@@ -223,5 +226,7 @@ class APP_EXPORT QgsRasterLayerProperties : public QgsOptionsDialogBase, private
     bool mDisableRenderTypeComboBoxCurrentIndexChanged = false;
 
     bool mMetadataFilled;
+
+    friend class QgsAppScreenShots;
 };
 #endif

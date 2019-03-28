@@ -191,7 +191,7 @@ bool QgsContrastEnhancement::generateLookupTable()
   if ( !mLookupTable )
     return false;
 
-  QgsDebugMsg( "building lookup table" );
+  QgsDebugMsg( QStringLiteral( "building lookup table" ) );
   QgsDebugMsg( "***MinimumValue : " + QString::number( mMinimumValue ) );
   QgsDebugMsg( "***MaximumValue : " + QString::number( mMaximumValue ) );
   QgsDebugMsg( "***mLookupTableOffset : " + QString::number( mLookupTableOffset ) );
@@ -247,7 +247,7 @@ void QgsContrastEnhancement::setContrastEnhancementAlgorithm( ContrastEnhancemen
 
 void QgsContrastEnhancement::setContrastEnhancementFunction( QgsContrastEnhancementFunction *function )
 {
-  QgsDebugMsgLevel( "called", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "called" ), 4 );
 
   if ( function )
   {
@@ -375,6 +375,55 @@ void QgsContrastEnhancement::readXml( const QDomElement &elem )
 
     setContrastEnhancementAlgorithm( algorithm );
   }
+}
+
+void QgsContrastEnhancement::toSld( QDomDocument &doc, QDomElement &element ) const
+{
+  if ( doc.isNull() || element.isNull() )
+    return;
+
+  QString algName;
+  switch ( contrastEnhancementAlgorithm() )
+  {
+    case StretchToMinimumMaximum:
+      algName = QStringLiteral( "StretchToMinimumMaximum" );
+      break;
+    /* TODO: check if ClipToZero => StretchAndClipToMinimumMaximum
+     * because value outside min/max ar considered as NoData instead of 0 */
+    case StretchAndClipToMinimumMaximum:
+      algName = QStringLiteral( "ClipToMinimumMaximum" );
+      break;
+    case ClipToMinimumMaximum:
+      algName = QStringLiteral( "ClipToMinimumMaximum" );
+      break;
+    case NoEnhancement:
+      return;
+    case UserDefinedEnhancement:
+      QString algName = contrastEnhancementAlgorithmString( contrastEnhancementAlgorithm() );
+      QgsDebugMsg( QObject::tr( "No SLD1.0 conversion yet for stretch algorithm %1" ).arg( algName ) );
+      return;
+  }
+
+  // Only <Normalize> is supported
+  // minValue and maxValue are that values as set depending on "Min /Max value settings"
+  // parameters
+  QDomElement normalizeElem = doc.createElement( QStringLiteral( "sld:Normalize" ) );
+  element.appendChild( normalizeElem );
+
+  QDomElement vendorOptionAlgorithmElem = doc.createElement( QStringLiteral( "sld:VendorOption" ) );
+  vendorOptionAlgorithmElem.setAttribute( QStringLiteral( "name" ), QStringLiteral( "algorithm" ) );
+  vendorOptionAlgorithmElem.appendChild( doc.createTextNode( algName ) );
+  normalizeElem.appendChild( vendorOptionAlgorithmElem );
+
+  QDomElement vendorOptionMinValueElem = doc.createElement( QStringLiteral( "sld:VendorOption" ) );
+  vendorOptionMinValueElem.setAttribute( QStringLiteral( "name" ), QStringLiteral( "minValue" ) );
+  vendorOptionMinValueElem.appendChild( doc.createTextNode( QString::number( minimumValue() ) ) );
+  normalizeElem.appendChild( vendorOptionMinValueElem );
+
+  QDomElement vendorOptionMaxValueElem = doc.createElement( QStringLiteral( "sld:VendorOption" ) );
+  vendorOptionMaxValueElem.setAttribute( QStringLiteral( "name" ), QStringLiteral( "maxValue" ) );
+  vendorOptionMaxValueElem.appendChild( doc.createTextNode( QString::number( maximumValue() ) ) );
+  normalizeElem.appendChild( vendorOptionMaxValueElem );
 }
 
 QString QgsContrastEnhancement::contrastEnhancementAlgorithmString( ContrastEnhancementAlgorithm algorithm )

@@ -179,7 +179,7 @@ int QgsRelief::processRaster( QgsFeedback *feedback )
       }
       if ( GDALRasterIO( rasterBand, GF_Read, 0, 0, xSize, 1, scanLine2, xSize, 1, GDT_Float32, 0, 0 )  != CE_None )
       {
-        QgsDebugMsg( "Raster IO Error" );
+        QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
       }
     }
     else
@@ -202,7 +202,7 @@ int QgsRelief::processRaster( QgsFeedback *feedback )
     {
       if ( GDALRasterIO( rasterBand, GF_Read, 0, i + 1, xSize, 1, scanLine3, xSize, 1, GDT_Float32, 0, 0 ) != CE_None )
       {
-        QgsDebugMsg( "Raster IO Error" );
+        QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
       }
     }
 
@@ -237,15 +237,15 @@ int QgsRelief::processRaster( QgsFeedback *feedback )
 
     if ( GDALRasterIO( outputRedBand, GF_Write, 0, i, xSize, 1, resultRedLine, xSize, 1, GDT_Byte, 0, 0 ) != CE_None )
     {
-      QgsDebugMsg( "Raster IO Error" );
+      QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
     }
     if ( GDALRasterIO( outputGreenBand, GF_Write, 0, i, xSize, 1, resultGreenLine, xSize, 1, GDT_Byte, 0, 0 ) != CE_None )
     {
-      QgsDebugMsg( "Raster IO Error" );
+      QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
     }
     if ( GDALRasterIO( outputBlueBand, GF_Write, 0, i, xSize, 1, resultBlueLine, xSize, 1, GDT_Byte, 0, 0 ) != CE_None )
     {
-      QgsDebugMsg( "Raster IO Error" );
+      QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
     }
   }
 
@@ -514,7 +514,7 @@ bool QgsRelief::exportFrequencyDistributionToCsv( const QString &file )
                        scanLine, nCellsX, 1, GDT_Float32,
                        0, 0 ) != CE_None )
     {
-      QgsDebugMsg( "Raster IO Error" );
+      QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
     }
 
     for ( int j = 0; j < nCellsX; ++j )
@@ -595,7 +595,7 @@ QList< QgsRelief::ReliefColor > QgsRelief::calculateOptimizedReliefClasses()
                        scanLine, nCellsX, 1, GDT_Float32,
                        0, 0 ) != CE_None )
     {
-      QgsDebugMsg( "Raster IO Error" );
+      QgsDebugMsg( QStringLiteral( "Raster IO Error" ) );
     }
     for ( int j = 0; j < nCellsX; ++j )
     {
@@ -639,6 +639,7 @@ QList< QgsRelief::ReliefColor > QgsRelief::calculateOptimizedReliefClasses()
 
   //set colors according to optimised class breaks
   QVector<QColor> colorList;
+  colorList.reserve( 9 );
   colorList.push_back( QColor( 7, 165, 144 ) );
   colorList.push_back( QColor( 12, 221, 162 ) );
   colorList.push_back( QColor( 33, 252, 183 ) );
@@ -670,6 +671,7 @@ void QgsRelief::optimiseClassBreaks( QList<int> &breaks, double *frequencies )
   {
     //get all the values between the class breaks into input
     QList< QPair < int, double > > regressionInput;
+    regressionInput.reserve( breaks.at( i + 1 ) - breaks.at( i ) );
     for ( int j = breaks.at( i ); j < breaks.at( i + 1 ); ++j )
     {
       regressionInput.push_back( qMakePair( j, frequencies[j] ) );

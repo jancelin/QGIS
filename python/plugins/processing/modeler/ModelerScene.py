@@ -47,16 +47,16 @@ class ModelerScene(QGraphicsScene):
         self.dialog = dialog
 
     def getParameterPositions(self):
-        return {key: item.pos() for key, item in list(self.paramItems.items())}
+        return {key: item.pos() for key, item in self.paramItems.items()}
 
     def getAlgorithmPositions(self):
-        return {key: item.pos() for key, item in list(self.algItems.items())}
+        return {key: item.pos() for key, item in self.algItems.items()}
 
     def getOutputPositions(self):
         pos = {}
-        for algName, outputs in list(self.outputItems.items()):
+        for algName, outputs in self.outputItems.items():
             outputPos = {}
-            for (key, value) in list(outputs.items()):
+            for key, value in outputs.items():
                 if value is not None:
                     outputPos[key] = value.pos()
                 else:
@@ -103,8 +103,12 @@ class ModelerScene(QGraphicsScene):
         for input_name in list(model.parameterComponents().keys()):
             idx = 0
             parameter_def = model.parameterDefinition(input_name)
+            parent_name = None
             if hasattr(parameter_def, 'parentLayerParameterName') and parameter_def.parentLayerParameterName():
                 parent_name = parameter_def.parentLayerParameterName()
+            elif hasattr(parameter_def, 'parentParameterName') and parameter_def.parentParameterName():
+                parent_name = parameter_def.parentParameterName()
+            if parent_name:
                 if input_name in self.paramItems and parent_name in self.paramItems:
                     input_item = self.paramItems[input_name]
                     parent_item = self.paramItems[parent_name]

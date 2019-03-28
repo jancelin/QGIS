@@ -71,6 +71,7 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
 
     int type() const override;
     QIcon icon() const override;
+    QgsLayoutItem::Flags itemFlags() const override;
 
     /**
      * Sets the map id() to a number not yet used in the layout. The existing id() is kept if it is not in use.
@@ -417,6 +418,12 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
 
     void finalizeRestoreFromXml() override;
 
+    /**
+     * Returns a list of the layers which will be rendered within this map item, considering
+     * any locked layers, linked map theme, and data defined settings.
+     */
+    QList<QgsMapLayer *> layersToRender( const QgsExpressionContext *context = nullptr ) const;
+
   protected:
 
     void draw( QgsLayoutItemRenderContext &context ) override;
@@ -618,9 +625,6 @@ class CORE_EXPORT QgsLayoutItemMap : public QgsLayoutItem
 
     //! Resets the item tooltip to reflect current map id
     void updateToolTip();
-
-    //! Returns a list of the layers to render for this map item
-    QList<QgsMapLayer *> layersToRender( const QgsExpressionContext *context = nullptr ) const;
 
     //! Returns current layer style overrides for this map item
     QMap<QString, QString> layerStyleOverridesToRender( const QgsExpressionContext &context ) const;

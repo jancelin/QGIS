@@ -193,6 +193,11 @@ void QgsSymbolLayer::prepareExpressions( const QgsSymbolRenderContext &context )
   }
 }
 
+bool QgsSymbolLayer::hasDataDefinedProperties() const
+{
+  return mDataDefinedProperties.hasActiveProperties();
+}
+
 const QgsPropertiesDefinition &QgsSymbolLayer::propertyDefinitions()
 {
   QgsSymbolLayer::initPropertyDefinitions();
@@ -389,6 +394,16 @@ QgsMarkerSymbolLayer::QgsMarkerSymbolLayer( bool locked )
 QgsLineSymbolLayer::QgsLineSymbolLayer( bool locked )
   : QgsSymbolLayer( QgsSymbol::Line, locked )
 {
+}
+
+QgsLineSymbolLayer::RenderRingFilter QgsLineSymbolLayer::ringFilter() const
+{
+  return mRingFilter;
+}
+
+void QgsLineSymbolLayer::setRingFilter( const RenderRingFilter filter )
+{
+  mRingFilter = filter;
 }
 
 QgsFillSymbolLayer::QgsFillSymbolLayer( bool locked )
@@ -609,12 +624,36 @@ void QgsLineSymbolLayer::drawPreviewIcon( QgsSymbolRenderContext &context, QSize
 
 void QgsLineSymbolLayer::renderPolygonStroke( const QPolygonF &points, QList<QPolygonF> *rings, QgsSymbolRenderContext &context )
 {
-  renderPolyline( points, context );
+  switch ( mRingFilter )
+  {
+    case AllRings:
+    case ExteriorRingOnly:
+      renderPolyline( points, context );
+      break;
+    case InteriorRingsOnly:
+      break;
+  }
+
   if ( rings )
   {
-    Q_FOREACH ( const QPolygonF &ring, *rings )
-      renderPolyline( ring, context );
+    switch ( mRingFilter )
+    {
+      case AllRings:
+      case InteriorRingsOnly:
+      {
+        for ( const QPolygonF &ring : qgis::as_const( *rings ) )
+          renderPolyline( ring, context );
+      }
+      break;
+      case ExteriorRingOnly:
+        break;
+    }
   }
+}
+
+double QgsLineSymbolLayer::width( const QgsRenderContext &context ) const
+{
+  return context.convertToPainterUnits( mWidth, mWidthUnit, mWidthMapUnitScale );
 }
 
 double QgsLineSymbolLayer::dxfWidth( const QgsDxfExport &e, QgsSymbolRenderContext &context ) const

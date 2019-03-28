@@ -61,8 +61,13 @@
 #include "qgslabelinggui.h"
 #include "qgssymbollayer.h"
 #include "qgsgeometryoptions.h"
+#include "qgsgeometrycheckfactory.h"
 #include "qgsvectorlayersavestyledialog.h"
 #include "qgsvectorlayerloadstyledialog.h"
+#include "qgsmessagebar.h"
+#include "qgsgeometrycheckregistry.h"
+#include "qgsgeometrycheck.h"
+#include "qgsanalysis.h"
 
 #include "layertree/qgslayertreelayer.h"
 #include "qgslayertree.h"
@@ -399,19 +404,90 @@ QgsVectorLayerProperties::QgsVectorLayerProperties(
   if ( mLayer->isSpatial() )
   {
     mRemoveDuplicateNodesCheckbox->setEnabled( true );
-    mGeometryPrecisionSpinBox->setEnabled( true );
+    mGeometryPrecisionLineEdit->setEnabled( true );
+    mGeometryPrecisionLineEdit->setValidator( new QDoubleValidator( mGeometryPrecisionLineEdit ) );
 
-    mRemoveDuplicateNodesCheckbox->setChecked( mLayer->geometryOptions()->removeDuplicateNodes() );
-    mGeometryPrecisionSpinBox->setValue( mLayer->geometryOptions()->geometryPrecision() );
+    double precision( mLayer->geometryOptions()->geometryPrecision() );
+    bool ok = true;
+    QString precisionStr( QLocale().toString( precision, ok ) );
+    if ( precision == 0.0 || ! ok )
+      precisionStr = QString();
+    mGeometryPrecisionLineEdit->setText( precisionStr );
 
-    mGeometryPrecisionSpinBox->setSuffix( QStringLiteral( " [%1]" ).arg( QgsUnitTypes::toAbbreviatedString( mLayer->crs().mapUnits() ) ) );
+    mRemoveDuplicateNodesManuallyActivated = mLayer->geometryOptions()->removeDuplicateNodes();
+    mRemoveDuplicateNodesCheckbox->setChecked( mRemoveDuplicateNodesManuallyActivated );
+    if ( !precisionStr.isNull() )
+      mRemoveDuplicateNodesCheckbox->setEnabled( false );
+    connect( mGeometryPrecisionLineEdit, &QLineEdit::textChanged, this, [this]
+    {
+      if ( !mGeometryPrecisionLineEdit->text().isEmpty() )
+      {
+        if ( mRemoveDuplicateNodesCheckbox->isEnabled() )
+          mRemoveDuplicateNodesManuallyActivated  = mRemoveDuplicateNodesCheckbox->isChecked();
+        mRemoveDuplicateNodesCheckbox->setEnabled( false );
+        mRemoveDuplicateNodesCheckbox->setChecked( true );
+      }
+      else
+      {
+        mRemoveDuplicateNodesCheckbox->setEnabled( true );
+        mRemoveDuplicateNodesCheckbox->setChecked( mRemoveDuplicateNodesManuallyActivated );
+      }
+    } );
+
+    mPrecisionUnitsLabel->setText( QStringLiteral( "[%1]" ).arg( QgsUnitTypes::toAbbreviatedString( mLayer->crs().mapUnits() ) ) );
+
+    QLayout *geometryCheckLayout = new QVBoxLayout();
+    const QList<QgsGeometryCheckFactory *> geometryCheckFactories = QgsAnalysis::instance()->geometryCheckRegistry()->geometryCheckFactories( mLayer, QgsGeometryCheck::FeatureNodeCheck, QgsGeometryCheck::Flag::AvailableInValidation );
+    const QStringList activeChecks = mLayer->geometryOptions()->geometryChecks();
+    for ( const QgsGeometryCheckFactory *factory : geometryCheckFactories )
+    {
+      QCheckBox *cb = new QCheckBox( factory->description() );
+      cb->setChecked( activeChecks.contains( factory->id() ) );
+      mGeometryCheckFactoriesGroupBoxes.insert( cb, factory->id() );
+      geometryCheckLayout->addWidget( cb );
+    }
+    mGeometryValidationGroupBox->setLayout( geometryCheckLayout );
+    mGeometryValidationGroupBox->setVisible( !geometryCheckFactories.isEmpty() );
+
+    QLayout *topologyCheckLayout = new QVBoxLayout();
+    const QList<QgsGeometryCheckFactory *> topologyCheckFactories = QgsAnalysis::instance()->geometryCheckRegistry()->geometryCheckFactories( mLayer, QgsGeometryCheck::LayerCheck, QgsGeometryCheck::Flag::AvailableInValidation );
+
+    for ( const QgsGeometryCheckFactory *factory : topologyCheckFactories )
+    {
+      QCheckBox *cb = new QCheckBox( factory->description() );
+      cb->setChecked( activeChecks.contains( factory->id() ) );
+      mGeometryCheckFactoriesGroupBoxes.insert( cb, factory->id() );
+      topologyCheckLayout->addWidget( cb );
+    }
+    mTopologyChecksGroupBox->setLayout( topologyCheckLayout );
+    mTopologyChecksGroupBox->setVisible( !topologyCheckFactories.isEmpty() );
   }
   else
   {
     mRemoveDuplicateNodesCheckbox->setEnabled( false );
-    mGeometryPrecisionSpinBox->setEnabled( false );
+    mGeometryPrecisionLineEdit->setEnabled( false );
     mGeometryAutoFixesGroupBox->setEnabled( false );
   }
+
+  mOptsPage_Information->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#information-properties" ) );
+  mOptsPage_Source->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#source-properties" ) );
+  mOptsPage_Style->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#symbology-properties" ) );
+  mOptsPage_Labels->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#labels-properties" ) );
+  mOptsPage_Diagrams->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#diagrams-properties" ) );
+  mOptsPage_SourceFields->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#source-fields-properties" ) );
+  mOptsPage_AttributesForm->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#attributes-form-properties" ) );
+  mOptsPage_Joins->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#joins-properties" ) );
+  mOptsPage_AuxiliaryStorage->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#auxiliary-storage-properties" ) );
+  mOptsPage_Actions->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#actions-properties" ) );
+  mOptsPage_Display->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#display-properties" ) );
+  mOptsPage_Rendering->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#rendering-properties" ) );
+  mOptsPage_Variables->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#variables-properties" ) );
+  mOptsPage_Metadata->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#metadata-properties" ) );
+  mOptsPage_DataDependencies->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#dependencies-properties" ) ) ;
+  mOptsPage_Legend->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#legend-properties" ) );
+  mOptsPage_Server->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#qgis-server-properties" ) );
+  mOptsPage_Digitizing->setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#digitizing-properties" ) );
+
 
   optionsStackedWidget_CurrentChanged( mOptStackedWidget->currentIndex() );
 }
@@ -428,7 +504,7 @@ void QgsVectorLayerProperties::toggleEditing()
 
 void QgsVectorLayerProperties::addPropertiesPageFactory( QgsMapLayerConfigWidgetFactory *factory )
 {
-  if ( !factory->supportLayerPropertiesDialog() )
+  if ( !factory->supportsLayer( mLayer ) || !factory->supportLayerPropertiesDialog() )
   {
     return;
   }
@@ -752,10 +828,20 @@ void QgsVectorLayerProperties::apply()
 #endif
 
   mLayer->geometryOptions()->setRemoveDuplicateNodes( mRemoveDuplicateNodesCheckbox->isChecked() );
-  mLayer->geometryOptions()->setGeometryPrecision( mGeometryPrecisionSpinBox->value() );
+  bool ok = true;
+  double precision( QLocale().toDouble( mGeometryPrecisionLineEdit->text(), &ok ) );
+  if ( ! ok )
+    precision = 0.0;
+  mLayer->geometryOptions()->setGeometryPrecision( precision );
 
-  // update symbology
-  emit refreshLegend( mLayer->id() );
+  QStringList activeChecks;
+  QHash<QCheckBox *, QString>::const_iterator it;
+  for ( it = mGeometryCheckFactoriesGroupBoxes.constBegin(); it != mGeometryCheckFactoriesGroupBoxes.constEnd(); ++it )
+  {
+    if ( it.key()->isChecked() )
+      activeChecks << it.value();
+  }
+  mLayer->geometryOptions()->setGeometryChecks( activeChecks );
 
   mLayer->triggerRepaint();
   // notify the project we've made a change
@@ -877,8 +963,8 @@ void QgsVectorLayerProperties::loadDefaultStyle_clicked()
     askToUser.setText( tr( "Load default style from: " ) );
     askToUser.setIcon( QMessageBox::Question );
     askToUser.addButton( tr( "Cancel" ), QMessageBox::RejectRole );
-    askToUser.addButton( tr( "Local database" ), QMessageBox::NoRole );
-    askToUser.addButton( tr( "Datasource database" ), QMessageBox::YesRole );
+    askToUser.addButton( tr( "Local Database" ), QMessageBox::NoRole );
+    askToUser.addButton( tr( "Datasource Database" ), QMessageBox::YesRole );
 
     switch ( askToUser.exec() )
     {
@@ -932,8 +1018,8 @@ void QgsVectorLayerProperties::saveDefaultStyle_clicked()
     askToUser.setText( tr( "Save default style to: " ) );
     askToUser.setIcon( QMessageBox::Question );
     askToUser.addButton( tr( "Cancel" ), QMessageBox::RejectRole );
-    askToUser.addButton( tr( "Local database" ), QMessageBox::NoRole );
-    askToUser.addButton( tr( "Datasource database" ), QMessageBox::YesRole );
+    askToUser.addButton( tr( "Local Database" ), QMessageBox::NoRole );
+    askToUser.addButton( tr( "Datasource Database" ), QMessageBox::YesRole );
 
     switch ( askToUser.exec() )
     {
@@ -1165,12 +1251,6 @@ void QgsVectorLayerProperties::loadStyle()
 
   //get the list of styles in the db
   int sectionLimit = mLayer->listStylesInDatabase( ids, names, descriptions, errorMsg );
-  if ( !errorMsg.isNull() )
-  {
-    QMessageBox::warning( this, tr( "Load Styles from Database" ), errorMsg );
-    return;
-  }
-
   QgsVectorLayerLoadStyleDialog dlg( mLayer );
   dlg.initializeLists( ids, names, descriptions, sectionLimit );
 
@@ -1311,6 +1391,7 @@ void QgsVectorLayerProperties::mJoinTreeWidget_itemDoubleClicked( QTreeWidgetIte
   }
 
   QgsJoinDialog d( mLayer, joinedLayers );
+  d.setWindowTitle( tr( "Edit Vector Join" ) );
   d.setJoinInfo( joins[j] );
 
   if ( d.exec() == QDialog::Accepted )
@@ -1562,9 +1643,11 @@ void QgsVectorLayerProperties::updateVariableEditor()
 
 void QgsVectorLayerProperties::showHelp()
 {
-  if ( mOptionsListWidget->currentIndex().data().toString() == "Form" )
+  const QVariant helpPage = mOptionsStackedWidget->currentWidget()->property( "helpPage" );
+
+  if ( helpPage.isValid() )
   {
-    QgsHelp::openHelp( QStringLiteral( "working_with_vector/vector_properties.html#configure-the-field-behavior" ) );
+    QgsHelp::openHelp( helpPage.toString() );
   }
   else
   {
@@ -1572,7 +1655,7 @@ void QgsVectorLayerProperties::showHelp()
   }
 }
 
-void QgsVectorLayerProperties::updateAuxiliaryStoragePage( bool reset )
+void QgsVectorLayerProperties::updateAuxiliaryStoragePage()
 {
   const QgsAuxiliaryLayer *alayer = mLayer->auxiliaryLayer();
 
@@ -1633,11 +1716,6 @@ void QgsVectorLayerProperties::updateAuxiliaryStoragePage( bool reset )
     mAuxiliaryStorageFieldsLineEdit->setText( QString() );
     mAuxiliaryStorageFeaturesLineEdit->setText( QString() );
   }
-
-  if ( reset && labelingDialog )
-  {
-    labelingDialog->setLayer( mLayer );
-  }
 }
 
 void QgsVectorLayerProperties::onAuxiliaryLayerNew()
@@ -1650,7 +1728,7 @@ void QgsVectorLayerProperties::onAuxiliaryLayerNew()
   QgsNewAuxiliaryLayerDialog dlg( mLayer, this );
   if ( dlg.exec() == QDialog::Accepted )
   {
-    updateAuxiliaryStoragePage( true );
+    updateAuxiliaryStoragePage();
   }
 }
 
@@ -1670,7 +1748,7 @@ void QgsVectorLayerProperties::onAuxiliaryLayerClear()
     QApplication::setOverrideCursor( Qt::WaitCursor );
     alayer->clear();
     QApplication::restoreOverrideCursor();
-    updateAuxiliaryStoragePage( true );
+    updateAuxiliaryStoragePage();
     mLayer->triggerRepaint();
   }
 }
@@ -1701,7 +1779,7 @@ void QgsVectorLayerProperties::onAuxiliaryLayerDelete()
     mLayer->setAuxiliaryLayer(); // remove auxiliary layer
     QgsAuxiliaryStorage::deleteTable( uri );
     QApplication::restoreOverrideCursor();
-    updateAuxiliaryStoragePage( true );
+    updateAuxiliaryStoragePage();
     mLayer->triggerRepaint();
   }
 }
@@ -1745,7 +1823,8 @@ void QgsVectorLayerProperties::onAuxiliaryLayerDeleteField()
   const QString msg = tr( "Are you sure you want to delete auxiliary field %1 for %2?" ).arg( item->text( 1 ), item->text( 0 ) );
 
   QMessageBox::StandardButton reply;
-  reply = QMessageBox::question( this, "Delete Auxiliary Field", msg, QMessageBox::Yes | QMessageBox::No );
+  const QString title = QObject::tr( "Delete Auxiliary Field" );
+  reply = QMessageBox::question( this, title, msg, QMessageBox::Yes | QMessageBox::No );
 
   if ( reply == QMessageBox::Yes )
   {
@@ -1789,7 +1868,15 @@ void QgsVectorLayerProperties::deleteAuxiliaryField( int index )
       labelingDialog->labelingGui()->deactivateField( static_cast<QgsPalLayerSettings::Property>( key ) );
     }
 
-    updateAuxiliaryStoragePage( true );
+    updateAuxiliaryStoragePage();
     mSourceFieldsPropertiesDialog->init();
+  }
+  else
+  {
+    const QString title = QObject::tr( "Delete Auxiliary Field" );
+    const int timeout = QgisApp::instance()->messageTimeout();
+    const QString errors = mLayer->auxiliaryLayer()->commitErrors().join( QStringLiteral( "\n  " ) );
+    const QString msg = QObject::tr( "Unable to remove auxiliary field (%1)" ).arg( errors );
+    QgisApp::instance()->messageBar()->pushMessage( title, msg, Qgis::Warning, timeout );
   }
 }

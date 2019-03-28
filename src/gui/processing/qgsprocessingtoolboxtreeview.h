@@ -82,9 +82,16 @@ class GUI_EXPORT QgsProcessingToolboxTreeView : public QTreeView
 
     /**
      * Sets \a filters controlling the view's contents.
+     * \see filters()
      */
     void setFilters( QgsProcessingToolboxProxyModel::Filters filters );
 
+    /**
+     * Returns the current filters controlling the view's contents.
+     * \see setFilters()
+     * \since QGIS 3.8
+     */
+    QgsProcessingToolboxProxyModel::Filters filters() const;
 
     /**
      * Sets the vector \a layer for the in-place algorithms
@@ -108,6 +115,8 @@ class GUI_EXPORT QgsProcessingToolboxTreeView : public QTreeView
      * Returns the first visible algorithm in the tree.
      */
     QModelIndex findFirstVisibleAlgorithm( const QModelIndex &parent );
+
+    friend class TestQgsProcessingModel;
 
 };
 

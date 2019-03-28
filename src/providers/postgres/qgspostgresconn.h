@@ -228,7 +228,7 @@ class QgsPostgresConn : public QObject
     int pgVersion() { return mPostgresqlVersion; }
 
     //! run a query and free result buffer
-    bool PQexecNR( const QString &query, bool retry = true );
+    bool PQexecNR( const QString &query );
 
     //! cursor handling
     bool openCursor( const QString &cursorName, const QString &declare );
@@ -244,15 +244,21 @@ class QgsPostgresConn : public QObject
     // libpq wrapper
     //
 
-    // run a query and check for errors
-    PGresult *PQexec( const QString &query, bool logError = true ) const;
+    // run a query and check for errors, thread-safe
+    PGresult *PQexec( const QString &query, bool logError = true, bool retry = true ) const;
     void PQfinish();
     QString PQerrorMessage() const;
-    int PQsendQuery( const QString &query );
     int PQstatus() const;
-    PGresult *PQgetResult();
     PGresult *PQprepare( const QString &stmtName, const QString &query, int nParams, const Oid *paramTypes );
     PGresult *PQexecPrepared( const QString &stmtName, const QStringList &params );
+
+    //! PQsendQuery is used for asynchronous queries (with PQgetResult)
+    //! Thread safety must be ensured by the caller by calling QgsPostgresConn::lock() and QgsPostgresConn::unlock()
+    int PQsendQuery( const QString &query );
+
+    //! PQgetResult is used for asynchronous queries (with PQsendQuery)
+    //! Thread safety must be ensured by the caller by calling QgsPostgresConn::lock() and QgsPostgresConn::unlock()
+    PGresult *PQgetResult();
 
     bool begin();
     bool commit();
@@ -425,7 +431,7 @@ class QgsPostgresConn : public QObject
 
     bool mTransaction;
 
-    QMutex mLock;
+    mutable QMutex mLock;
 };
 
 // clazy:excludeall=qstring-allocations

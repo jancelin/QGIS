@@ -197,11 +197,13 @@ QgsProjectProperty *findKey_( const QString &scope,
 \param key key name
 \param rootProperty is the property from which to start adding
 \param value the value associated with the key
+\param propertiesModified the parameter will be set to true if the written entry modifies pre-existing properties
 */
 QgsProjectProperty *addKey_( const QString &scope,
                              const QString &key,
                              QgsProjectPropertyKey *rootProperty,
-                             const QVariant &value )
+                             const QVariant &value,
+                             bool &propertiesModified )
 {
   QStringList keySequence = makeKeyTokens_( scope, key );
 
@@ -210,6 +212,7 @@ QgsProjectProperty *addKey_( const QString &scope,
   QgsProjectProperty *nextProperty; // link to next property down hierarchy
   QgsProjectPropertyKey *newPropertyKey = nullptr;
 
+  propertiesModified = false;
   while ( ! keySequence.isEmpty() )
   {
     // if the current head of the sequence list matches the property name,
@@ -223,14 +226,24 @@ QgsProjectProperty *addKey_( const QString &scope,
       // name to store the value
       if ( 1 == keySequence.count() )
       {
-        currentProperty->setValue( keySequence.front(), value );
+        QgsProjectProperty *property = currentProperty->find( keySequence.front() );
+        if ( !property || property->value() != value )
+        {
+          currentProperty->setValue( keySequence.front(), value );
+          propertiesModified = true;
+        }
+
         return currentProperty;
       }
       // we're at the top element if popping the keySequence element
       // will leave it empty; in that case, just add the key
       else if ( keySequence.isEmpty() )
       {
-        currentProperty->setValue( value );
+        if ( currentProperty->value() != value )
+        {
+          currentProperty->setValue( value );
+          propertiesModified = true;
+        }
 
         return currentProperty;
       }
@@ -263,9 +276,15 @@ QgsProjectProperty *addKey_( const QString &scope,
   }
 
   return nullptr;
-
 }
 
+/**
+ * Remove a given key
+
+\param scope scope of key
+\param key key name
+\param rootProperty is the property from which to start adding
+*/
 
 void removeKey_( const QString &scope,
                  const QString &key,
@@ -325,7 +344,6 @@ void removeKey_( const QString &scope,
       return;
     }
   }
-
 }
 
 QgsProject::QgsProject( QObject *parent )
@@ -603,6 +621,9 @@ QgsCoordinateReferenceSystem QgsProject::crs() const
 
 void QgsProject::setCrs( const QgsCoordinateReferenceSystem &crs )
 {
+  if ( crs == mCrs )
+    return;
+
   mCrs = crs;
   writeEntry( QStringLiteral( "SpatialRefSys" ), QStringLiteral( "/ProjectionsEnabled" ), crs.isValid() ? 1 : 0 );
   setDirty( true );
@@ -620,7 +641,6 @@ QString QgsProject::ellipsoid() const
 void QgsProject::setEllipsoid( const QString &ellipsoid )
 {
   writeEntry( QStringLiteral( "Measure" ), QStringLiteral( "/Ellipsoid" ), ellipsoid );
-  setDirty( true );
   emit ellipsoidChanged( ellipsoid );
 }
 
@@ -631,6 +651,9 @@ QgsCoordinateTransformContext QgsProject::transformContext() const
 
 void QgsProject::setTransformContext( const QgsCoordinateTransformContext &context )
 {
+  if ( context == mTransformContext )
+    return;
+
   mTransformContext = context;
   emit transformContextChanged();
 }
@@ -665,6 +688,7 @@ void QgsProject::clear()
   mLayoutManager->clear();
   mSnappingConfig.reset();
   emit snappingConfigChanged( mSnappingConfig );
+  emit topologicalEditingChanged();
 
   mMapThemeCollection.reset( new QgsMapThemeCollection( this ) );
   emit mapThemeCollectionChanged();
@@ -822,7 +846,7 @@ void QgsProject::setSnappingConfig( const QgsSnappingConfig &snappingConfig )
     return;
 
   mSnappingConfig = snappingConfig;
-  setDirty();
+  setDirty( true );
   emit snappingConfigChanged( mSnappingConfig );
 }
 
@@ -868,7 +892,6 @@ bool QgsProject::_getMapLayers( const QDomDocument &doc, QList<QDomNode> &broken
     if ( element.attribute( QStringLiteral( "embedded" ) ) == QLatin1String( "1" ) )
     {
       createEmbeddedLayer( element.attribute( QStringLiteral( "id" ) ), readPath( element.attribute( QStringLiteral( "project" ) ) ), brokenNodes );
-      continue;
     }
     else
     {
@@ -1339,6 +1362,7 @@ bool QgsProject::readProjectFile( const QString &filename )
   emit readProject( *doc );
   emit readProjectWithContext( *doc, context );
   emit snappingConfigChanged( mSnappingConfig );
+  emit topologicalEditingChanged();
 
   // if all went well, we're allegedly in pristine state
   if ( clean )
@@ -1649,7 +1673,10 @@ bool QgsProject::write()
 
     // errors raised during writing project file are more important
     if ( !asOk && writeOk )
-      setError( tr( "Unable to save auxiliary storage" ) );
+    {
+      const QString err = mAuxiliaryStorage->errorString();
+      setError( tr( "Unable to save auxiliary storage ('%1')" ).arg( err ) );
+    }
 
     return asOk && writeOk;
   }
@@ -1894,37 +1921,57 @@ bool QgsProject::writeProjectFile( const QString &filename )
 
 bool QgsProject::writeEntry( const QString &scope, QString const &key, bool value )
 {
-  setDirty( true );
+  bool propertiesModified;
+  bool success = addKey_( scope, key, &mProperties, value, propertiesModified );
 
-  return addKey_( scope, key, &mProperties, value );
+  if ( propertiesModified )
+    setDirty( true );
+
+  return success;
 }
 
 bool QgsProject::writeEntry( const QString &scope, const QString &key, double value )
 {
-  setDirty( true );
+  bool propertiesModified;
+  bool success = addKey_( scope, key, &mProperties, value, propertiesModified );
 
-  return addKey_( scope, key, &mProperties, value );
+  if ( propertiesModified )
+    setDirty( true );
+
+  return success;
 }
 
 bool QgsProject::writeEntry( const QString &scope, QString const &key, int value )
 {
-  setDirty( true );
+  bool propertiesModified;
+  bool success = addKey_( scope, key, &mProperties, value, propertiesModified );
 
-  return addKey_( scope, key, &mProperties, value );
+  if ( propertiesModified )
+    setDirty( true );
+
+  return success;
 }
 
 bool QgsProject::writeEntry( const QString &scope, const QString &key, const QString &value )
 {
-  setDirty( true );
+  bool propertiesModified;
+  bool success = addKey_( scope, key, &mProperties, value, propertiesModified );
 
-  return addKey_( scope, key, &mProperties, value );
+  if ( propertiesModified )
+    setDirty( true );
+
+  return success;
 }
 
 bool QgsProject::writeEntry( const QString &scope, const QString &key, const QStringList &value )
 {
-  setDirty( true );
+  bool propertiesModified;
+  bool success = addKey_( scope, key, &mProperties, value, propertiesModified );
 
-  return addKey_( scope, key, &mProperties, value );
+  if ( propertiesModified )
+    setDirty( true );
+
+  return success;
 }
 
 QStringList QgsProject::readListEntry( const QString &scope,
@@ -2048,9 +2095,11 @@ bool QgsProject::readBoolEntry( const QString &scope, const QString &key, bool d
 
 bool QgsProject::removeEntry( const QString &scope, const QString &key )
 {
-  removeKey_( scope, key, mProperties );
-
-  setDirty( true );
+  if ( findKey_( scope, key, mProperties ) )
+  {
+    removeKey_( scope, key, mProperties );
+    setDirty( true );
+  }
 
   return !findKey_( scope, key, mProperties );
 }
@@ -2321,6 +2370,9 @@ bool QgsProject::evaluateDefaultValues() const
 
 void QgsProject::setEvaluateDefaultValues( bool evaluateDefaultValues )
 {
+  if ( evaluateDefaultValues == mEvaluateDefaultValues )
+    return;
+
   const QMap<QString, QgsMapLayer *> layers = mapLayers();
   QMap<QString, QgsMapLayer *>::const_iterator layerIt = layers.constBegin();
   for ( ; layerIt != layers.constEnd(); ++layerIt )
@@ -2614,7 +2666,8 @@ bool QgsProject::zip( const QString &filename )
 
   if ( ! saveAuxiliaryStorage( asFileName ) )
   {
-    setError( tr( "Unable to save auxiliary storage" ) );
+    const QString err = mAuxiliaryStorage->errorString();
+    setError( tr( "Unable to save auxiliary storage ('%1')" ).arg( err ) );
     return false;
   }
 
@@ -2811,6 +2864,9 @@ const QgsProjectMetadata &QgsProject::metadata() const
 
 void QgsProject::setMetadata( const QgsProjectMetadata &metadata )
 {
+  if ( metadata == mMetadata )
+    return;
+
   mMetadata = metadata;
   emit metadataChanged();
 

@@ -393,6 +393,7 @@ sub fix_annotations {
     $line =~ s/\bSIP_TRANSFERTHIS\b/\/TransferThis\//;
 
     $line =~ s/SIP_PYNAME\(\s*(\w+)\s*\)/\/PyName=$1\//;
+    $line =~ s/SIP_TYPEHINT\(\s*(\w+)\s*\)/\/TypeHint="$1"\//;
     $line =~ s/SIP_VIRTUALERRORHANDLER\(\s*(\w+)\s*\)/\/VirtualErrorHandler=$1\//;
     $line =~ s/SIP_THROW\(\s*(\w+)\s*\)/throw\( $1 \)/;
 
@@ -520,14 +521,14 @@ while ($LINE_IDX < $LINE_COUNT){
     }
 
     # do not process SIP code %XXXCode
-    if ( $SIP_RUN == 1 && $LINE =~ m/^ *% *(VirtualErrorHandler|MappedType|Type(?:Header)?Code|Module(?:Header)?Code|Convert(?:From|To)(?:Type|SubClass)Code|MethodCode)(.*)?$/ ){
+    if ( $SIP_RUN == 1 && $LINE =~ m/^ *% *(VirtualErrorHandler|MappedType|Type(?:Header)?Code|Module(?:Header)?Code|Convert(?:From|To)(?:Type|SubClass)Code|MethodCode|Docstring)(.*)?$/ ){
         $LINE = "%$1$2";
         $COMMENT = '';
         dbg_info("do not process SIP code");
         while ( $LINE !~ m/^ *% *End/ ){
             write_output("COD", $LINE."\n");
             $LINE = read_line();
-            $LINE =~ s/^ *% *(VirtualErrorHandler|MappedType|Type(?:Header)?Code|Module(?:Header)?Code|Convert(?:From|To)(?:Type|SubClass)Code|MethodCode)(.*)?$/%$1$2/;
+            $LINE =~ s/^ *% *(VirtualErrorHandler|MappedType|Type(?:Header)?Code|Module(?:Header)?Code|Convert(?:From|To)(?:Type|SubClass)Code|MethodCode|Docstring)(.*)?$/%$1$2/;
             $LINE =~ s/^\s*SIP_END(.*)$/%End$1/;
         }
         $LINE =~ s/^\s*% End/%End/;
@@ -754,7 +755,7 @@ while ($LINE_IDX < $LINE_COUNT){
 
     # class declaration started
     # https://regex101.com/r/6FWntP/10
-    if ( $LINE =~ m/^(\s*class)\s+([A-Z]+_EXPORT\s+)?(\w+)(\s*\:\s*(public|protected|private)\s+\w+(< *(\w|::)+ *>)?(::\w+(<\w+>)?)*(,\s*(public|protected|private)\s+\w+(< *(\w|::)+ *>)?(::\w+(<\w+>)?)*)*)?(?<annot>\s*\/?\/?\s*SIP_\w+)?\s*?(\/\/.*|(?!;))$/ ){
+    if ( $LINE =~ m/^(\s*class)\s+([A-Z0-9_]+_EXPORT\s+)?(\w+)(\s*\:\s*(public|protected|private)\s+\w+(< *(\w|::)+ *>)?(::\w+(<\w+>)?)*(,\s*(public|protected|private)\s+\w+(< *(\w|::)+ *>)?(::\w+(<\w+>)?)*)*)?(?<annot>\s*\/?\/?\s*SIP_\w+)?\s*?(\/\/.*|(?!;))$/ ){
         dbg_info("class definition started");
         push @ACCESS, PUBLIC;
         push @EXPORTED, 0;
@@ -770,7 +771,7 @@ while ($LINE_IDX < $LINE_COUNT){
                 push @DECLARED_CLASSES, $CLASSNAME[$#CLASSNAME];
             }
             dbg_info("class: ".$CLASSNAME[$#CLASSNAME]);
-            if ($LINE =~ m/\b[A-Z]+_EXPORT\b/ || $#CLASSNAME != 0 || $INPUT_LINES[$LINE_IDX-2] =~ m/^\s*template</){
+            if ($LINE =~ m/\b[A-Z0-9_]+_EXPORT\b/ || $#CLASSNAME != 0 || $INPUT_LINES[$LINE_IDX-2] =~ m/^\s*template</){
                 # class should be exported except those not at top level or template classes
                 # if class is not exported, then its methods should be (checked whenever leaving out the class)
                 $EXPORTED[-1]++;

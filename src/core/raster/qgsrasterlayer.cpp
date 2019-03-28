@@ -49,6 +49,7 @@ email                : tim at linfiniti.com
 #include "qgssinglebandgrayrenderer.h"
 #include "qgssinglebandpseudocolorrenderer.h"
 #include "qgssettings.h"
+#include "qgssymbollayerutils.h"
 
 #include <cmath>
 #include <cstdio>
@@ -118,7 +119,7 @@ QgsRasterLayer::QgsRasterLayer( const QString &uri,
   , TRSTRING_NOT_SET( tr( "Not Set" ) )
   , mProviderKey( providerKey )
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   init();
 
   QgsDataProvider::ProviderOptions providerOptions;
@@ -175,7 +176,7 @@ bool QgsRasterLayer::isValidRasterFileName( const QString &fileNameQString, QStr
   isvalidrasterfilename_t *pValid = reinterpret_cast< isvalidrasterfilename_t * >( cast_to_fptr( QgsProviderRegistry::instance()->function( "gdal",  "isValidRasterFileName" ) ) );
   if ( ! pValid )
   {
-    QgsDebugMsg( "Could not resolve isValidRasterFileName in gdal provider library" );
+    QgsDebugMsg( QStringLiteral( "Could not resolve isValidRasterFileName in gdal provider library" ) );
     return false;
   }
 
@@ -265,7 +266,7 @@ void QgsRasterLayer::draw( QPainter *theQPainter,
                            QgsRasterViewPort *rasterViewPort,
                            const QgsMapToPixel *qgsMapToPixel )
 {
-  QgsDebugMsgLevel( " 3 arguments", 4 );
+  QgsDebugMsgLevel( QStringLiteral( " 3 arguments" ), 4 );
   QTime time;
   time.start();
   //
@@ -289,7 +290,7 @@ void QgsRasterLayer::draw( QPainter *theQPainter,
   QgsRasterDrawer drawer( &iterator );
   drawer.draw( theQPainter, rasterViewPort, qgsMapToPixel );
 
-  QgsDebugMsgLevel( QString( "total raster draw time (ms):     %1" ).arg( time.elapsed(), 5 ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "total raster draw time (ms):     %1" ).arg( time.elapsed(), 5 ), 4 );
 } //end of draw method
 
 QgsLegendColorList QgsRasterLayer::legendSymbologyItems() const
@@ -495,18 +496,18 @@ QString QgsRasterLayer::htmlMetadata() const
 QPixmap QgsRasterLayer::paletteAsPixmap( int bandNumber )
 {
   //TODO: This function should take dimensions
-  QgsDebugMsgLevel( "entered.", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "entered." ), 4 );
 
   // Only do this for the GDAL provider?
   // Maybe WMS can do this differently using QImage::numColors and QImage::color()
   if ( mDataProvider->colorInterpretation( bandNumber ) == QgsRaster::PaletteIndex )
   {
-    QgsDebugMsgLevel( "....found paletted image", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "....found paletted image" ), 4 );
     QgsColorRampShader myShader;
     QList<QgsColorRampShader::ColorRampItem> myColorRampItemList = mDataProvider->colorTable( bandNumber );
     if ( !myColorRampItemList.isEmpty() )
     {
-      QgsDebugMsgLevel( "....got color ramp item list", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "....got color ramp item list" ), 4 );
       myShader.setColorRampItemList( myColorRampItemList );
       myShader.setColorRampType( QgsColorRampShader::Discrete );
       // Draw image
@@ -590,7 +591,7 @@ void QgsRasterLayer::init()
 
 void QgsRasterLayer::setDataProvider( QString const &provider, const QgsDataProvider::ProviderOptions &options )
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   mValid = false; // assume the layer is invalid until we determine otherwise
 
   mPipe.remove( mDataProvider ); // deletes if exists
@@ -615,7 +616,7 @@ void QgsRasterLayer::setDataProvider( QString const &provider, const QgsDataProv
     appendError( ERR( tr( "Cannot instantiate the '%1' data provider" ).arg( mProviderKey ) ) );
     return;
   }
-  QgsDebugMsgLevel( "Data provider created", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Data provider created" ), 4 );
   mDataProvider->setParent( this );
 
   // Set data provider into pipe even if not valid so that it is deleted with pipe (with layer)
@@ -630,7 +631,7 @@ void QgsRasterLayer::setDataProvider( QString const &provider, const QgsDataProv
   if ( mDataProvider->providerCapabilities() & QgsRasterDataProvider::ReadLayerMetadata )
   {
     setMetadata( mDataProvider->layerMetadata() );
-    QgsDebugMsgLevel( QString( "Set Data provider QgsLayerMetadata identifier[%1]" ).arg( metadata().identifier() ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Set Data provider QgsLayerMetadata identifier[%1]" ).arg( metadata().identifier() ), 4 );
   }
 
   if ( provider == QLatin1String( "gdal" ) )
@@ -796,7 +797,7 @@ void QgsRasterLayer::setDataProvider( QString const &provider, const QgsDataProv
   //mark the layer as valid
   mValid = true;
 
-  QgsDebugMsgLevel( "exiting.", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "exiting." ), 4 );
 } // QgsRasterLayer::setDataProvider
 
 void QgsRasterLayer::closeDataProvider()
@@ -833,10 +834,10 @@ void QgsRasterLayer::computeMinMax( int band,
   {
     const double myLower = mmo.cumulativeCutLower();
     const double myUpper = mmo.cumulativeCutUpper();
-    QgsDebugMsgLevel( QString( "myLower = %1 myUpper = %2" ).arg( myLower ).arg( myUpper ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "myLower = %1 myUpper = %2" ).arg( myLower ).arg( myUpper ), 4 );
     mDataProvider->cumulativeCut( band, myLower, myUpper, min, max, extent, sampleSize );
   }
-  QgsDebugMsgLevel( QString( "band = %1 min = %2 max = %3" ).arg( band ).arg( min ).arg( max ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "band = %1 min = %2 max = %3" ).arg( band ).arg( min ).arg( max ), 4 );
 
 }
 
@@ -858,7 +859,7 @@ void QgsRasterLayer::setContrastEnhancement( QgsContrastEnhancement::ContrastEnh
     bool generateLookupTableFlag,
     QgsRasterRenderer *rasterRenderer )
 {
-  QgsDebugMsgLevel( QString( "theAlgorithm = %1 limits = %2 extent.isEmpty() = %3" ).arg( algorithm ).arg( limits ).arg( extent.isEmpty() ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "theAlgorithm = %1 limits = %2 extent.isEmpty() = %3" ).arg( algorithm ).arg( limits ).arg( extent.isEmpty() ), 4 );
   if ( !rasterRenderer || !mDataProvider )
   {
     return;
@@ -1160,7 +1161,7 @@ bool QgsRasterLayer::defaultContrastEnhancementSettings(
 
   if ( key.isEmpty() )
   {
-    QgsDebugMsg( "No default contrast enhancement for this drawing style" );
+    QgsDebugMsg( QStringLiteral( "No default contrast enhancement for this drawing style" ) );
     myAlgorithm = QgsContrastEnhancement::contrastEnhancementAlgorithmFromString( QString() );
     myLimits = QgsRasterMinMaxOrigin::limitsFromString( QString() );
     return false;
@@ -1181,7 +1182,7 @@ bool QgsRasterLayer::defaultContrastEnhancementSettings(
 
 void QgsRasterLayer::setDefaultContrastEnhancement()
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
 
   QgsContrastEnhancement::ContrastEnhancementAlgorithm myAlgorithm;
   QgsRasterMinMaxOrigin::Limits myLimits;
@@ -1192,11 +1193,11 @@ void QgsRasterLayer::setDefaultContrastEnhancement()
 
 void QgsRasterLayer::setLayerOrder( QStringList const &layers )
 {
-  QgsDebugMsgLevel( "entered.", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "entered." ), 4 );
 
   if ( mDataProvider )
   {
-    QgsDebugMsgLevel( "About to mDataProvider->setLayerOrder(layers).", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "About to mDataProvider->setLayerOrder(layers)." ), 4 );
     mDataProvider->setLayerOrder( layers );
   }
 
@@ -1207,7 +1208,7 @@ void QgsRasterLayer::setSubLayerVisibility( const QString &name, bool vis )
 
   if ( mDataProvider )
   {
-    QgsDebugMsgLevel( "About to mDataProvider->setSubLayerVisibility(name, vis).", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "About to mDataProvider->setSubLayerVisibility(name, vis)." ), 4 );
     mDataProvider->setSubLayerVisibility( name, vis );
   }
 
@@ -1218,9 +1219,213 @@ QDateTime QgsRasterLayer::timestamp() const
   return mDataProvider->timestamp();
 }
 
+
+bool QgsRasterLayer::writeSld( QDomNode &node, QDomDocument &doc, QString &errorMessage, const QgsStringMap &props ) const
+{
+  Q_UNUSED( errorMessage );
+
+  QgsStringMap localProps = QgsStringMap( props );
+  if ( hasScaleBasedVisibility() )
+  {
+    // TODO: QgsSymbolLayerUtils::mergeScaleDependencies generate SE only and not SLD1.0
+    QgsSymbolLayerUtils::mergeScaleDependencies( maximumScale(), minimumScale(), localProps );
+  }
+
+  if ( isSpatial() ) // TODO: does it make sense this control?
+  {
+    // store constraints
+    QDomElement constraintElem = doc.createElement( QStringLiteral( "sld:LayerFeatureConstraints" ) );
+    node.appendChild( constraintElem );
+
+    QDomElement featureTypeConstraintElem = doc.createElement( QStringLiteral( "sld:FeatureTypeConstraint" ) );
+    constraintElem.appendChild( featureTypeConstraintElem );
+
+    QDomElement userStyleElem = doc.createElement( QStringLiteral( "sld:UserStyle" ) );
+    node.appendChild( userStyleElem );
+
+    if ( !name().isEmpty() )
+    {
+      QDomElement nameElem = doc.createElement( QStringLiteral( "sld:Name" ) );
+      nameElem.appendChild( doc.createTextNode( name() ) );
+      userStyleElem.appendChild( nameElem );
+    }
+
+    if ( !abstract().isEmpty() )
+    {
+      QDomElement abstractElem = doc.createElement( QStringLiteral( "sld:Abstract" ) );
+      abstractElem.appendChild( doc.createTextNode( abstract() ) );
+      userStyleElem.appendChild( abstractElem );
+    }
+
+    if ( !title().isEmpty() )
+    {
+      QDomElement titleElem = doc.createElement( QStringLiteral( "sld:Title" ) );
+      titleElem.appendChild( doc.createTextNode( title() ) );
+      userStyleElem.appendChild( titleElem );
+    }
+
+    QDomElement featureTypeStyleElem = doc.createElement( QStringLiteral( "sld:FeatureTypeStyle" ) );
+    userStyleElem.appendChild( featureTypeStyleElem );
+
+#if 0
+    // TODO: Is there a way to fill it's value with the named style?
+    // by default <sld:Name> under <sld:FeatureTypeStyle> can have 0 occurrences
+    // the same happen for tags:
+    // sld:Title
+    // sld:Abstract
+    // sld:FeatureTypeName
+    // sld:SemanticTypeIdentifier
+    QDomElement typeStyleNameElem = doc.createElement( QStringLiteral( "sld:Name" ) );
+    featureTypeStyleElem.appendChild( typeStyleNameElem );
+#endif
+
+    QDomElement typeStyleRuleElem = doc.createElement( QStringLiteral( "sld:Rule" ) );
+    featureTypeStyleElem.appendChild( typeStyleRuleElem );
+
+    // add ScaleDenominator tags
+    if ( hasScaleBasedVisibility() )
+    {
+      // note that denominator is the inverted value of scale
+      if ( maximumScale() != 0.0 )
+      {
+        QDomElement minScaleElem = doc.createElement( QStringLiteral( "sld:MinScaleDenominator" ) );
+        minScaleElem.appendChild( doc.createTextNode( QString::number( maximumScale() ) ) );
+        typeStyleRuleElem.appendChild( minScaleElem );
+      }
+
+      QDomElement maxScaleElem = doc.createElement( QStringLiteral( "sld:MaxScaleDenominator" ) );
+      maxScaleElem.appendChild( doc.createTextNode( QString::number( minimumScale() ) ) );
+      typeStyleRuleElem.appendChild( maxScaleElem );
+    }
+
+    // export renderer dependent tags
+    mPipe.renderer()->toSld( doc, typeStyleRuleElem, localProps );
+
+    // inject raster layer parameters in RasterSymbolizer tag because
+    // they belongs to rasterlayer and not to the renderer => avoid to
+    // pass many parameters value via localProps
+    QDomNodeList elements = typeStyleRuleElem.elementsByTagName( QStringLiteral( "sld:RasterSymbolizer" ) );
+    if ( elements.size() != 0 )
+    {
+      // there SHOULD be only one
+      QDomElement rasterSymbolizerElem = elements.at( 0 ).toElement();
+
+      // lamda helper used below to reduce code redundancy
+      auto vendorOptionWriter = [&]( QString name, QString value )
+      {
+        QDomElement vendorOptionElem = doc.createElement( QStringLiteral( "sld:VendorOption" ) );
+        vendorOptionElem.setAttribute( QStringLiteral( "name" ), name );
+        vendorOptionElem.appendChild( doc.createTextNode( value ) );
+        rasterSymbolizerElem.appendChild( vendorOptionElem );
+      };
+
+      // add greyScale rendering mode if set
+      if ( hueSaturationFilter()->grayscaleMode() != QgsHueSaturationFilter::GrayscaleOff )
+      {
+        QString property;
+        switch ( hueSaturationFilter()->grayscaleMode() )
+        {
+          case QgsHueSaturationFilter::GrayscaleLightness:
+            property = QStringLiteral( "lightness" );
+            break;
+          case QgsHueSaturationFilter::GrayscaleLuminosity:
+            property = QStringLiteral( "luminosity" );
+            break;
+          case QgsHueSaturationFilter::GrayscaleAverage:
+            property = QStringLiteral( "average" );
+            break;
+          case QgsHueSaturationFilter::GrayscaleOff:
+            // added just to avoid travis fail
+            break;
+        }
+        if ( !property.isEmpty() )
+          vendorOptionWriter( QStringLiteral( "grayScale" ), property );
+      }
+
+      // add Hue, Saturation and Lighting values in props is Hue filter is set
+      if ( hueSaturationFilter() && hueSaturationFilter()->colorizeOn() )
+      {
+        vendorOptionWriter( QStringLiteral( "colorizeOn" ), QString::number( hueSaturationFilter()->colorizeOn() ) );
+        vendorOptionWriter( QStringLiteral( "colorizeRed" ), QString::number( hueSaturationFilter()->colorizeColor().red() ) );
+        vendorOptionWriter( QStringLiteral( "colorizeGreen" ), QString::number( hueSaturationFilter()->colorizeColor().green() ) );
+        vendorOptionWriter( QStringLiteral( "colorizeBlue" ), QString::number( hueSaturationFilter()->colorizeColor().blue() ) );
+        if ( hueSaturationFilter()->colorizeStrength() != 100.0 )
+          vendorOptionWriter( QStringLiteral( "colorizeStrength" ), QString::number( hueSaturationFilter()->colorizeStrength() / 100.0 ) );
+        vendorOptionWriter( QStringLiteral( "saturation" ), QString::number( hueSaturationFilter()->colorizeColor().saturationF() ) );
+      }
+      else
+      {
+        // saturation != 0 (default value)
+        if ( hueSaturationFilter()->saturation() != 0 )
+        {
+          // normlize value [-100:100] -> [0:1]
+          int s = hueSaturationFilter()->saturation();
+          double sF = ( s - ( -100.0 ) ) / ( 100.0 - ( -100.0 ) );
+          vendorOptionWriter( QStringLiteral( "saturation" ), QString::number( sF ) );
+        }
+      }
+
+      // brightness != 0 (default value)
+      if ( brightnessFilter()->brightness() != 0 )
+      {
+        // normalize value [-255:255] -> [0:1]
+        int b = brightnessFilter()->brightness();
+        double bF = ( b - ( -255.0 ) ) / ( 255.0 - ( -255.0 ) );
+        vendorOptionWriter( QStringLiteral( "brightness" ), QString::number( bF ) );
+      }
+
+      // contrast != 0 (default value)
+      if ( brightnessFilter()->contrast() != 0 )
+      {
+        // normlize value [-100:100] -> [0:1]
+        int c = brightnessFilter()->contrast();
+        double cF = ( c - ( -100.0 ) ) / ( 100.0 - ( -100.0 ) );
+        vendorOptionWriter( QStringLiteral( "contrast" ), QString::number( cF ) );
+      }
+
+#if 0
+      // TODO: check if the below mapping formula make sense to map QGIS contrast with SLD gamma value
+      //
+      // add SLD1.0 ContrastEnhancement GammaValue = QGIS Contrast
+      // SLD1.0 does only define 1 as neutral/center double value but does not define range.
+      // because https://en.wikipedia.org/wiki/Gamma_correction assumed gamma is >0.
+      // whilst QGIS has a -100/100 values centered in 0 => QGIS contrast value will be scaled in the
+      // following way:
+      // [-100,0] => [0,1] and [0,100] => [1,100]
+      // an alternative could be scale [-100,100] => (0,2]
+      //
+      if ( newProps.contains( QStringLiteral( "contrast" ) ) )
+      {
+        double gamma;
+        double contrast = newProps[ QStringLiteral( "contrast" ) ].toDouble();
+        double percentage = ( contrast - ( -100.0 ) ) / ( 100.0 - ( -100.0 ) );
+        if ( percentage <= 0.5 )
+        {
+          // stretch % to [0-1]
+          gamma = percentage / 0.5;
+        }
+        else
+        {
+          gamma = contrast;
+        }
+
+        QDomElement globalContrastEnhancementElem = doc.createElement( QStringLiteral( "sld:ContrastEnhancement" ) );
+        rasterSymolizerElem.appendChild( globalContrastEnhancementElem );
+
+        QDomElement gammaValueElem = doc.createElement( QStringLiteral( "sld:GammaValue" ) );
+        gammaValueElem.appendChild( doc.createTextNode( QString::number( gamma ) ) );
+        globalContrastEnhancementElem.appendChild( gammaValueElem );
+      }
+#endif
+    }
+  }
+  return true;
+}
+
+
 void QgsRasterLayer::setRenderer( QgsRasterRenderer *renderer )
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   if ( !renderer )
   {
     return;
@@ -1409,7 +1614,7 @@ bool QgsRasterLayer::readStyle( const QDomNode &node, QString &errorMessage, Qgs
 
 bool QgsRasterLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &context )
 {
-  QgsDebugMsgLevel( "Entered", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
   // Make sure to read the file first so stats etc are initialized properly!
 
   //process provider key
@@ -1443,7 +1648,7 @@ bool QgsRasterLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &c
     // The old WMS URI format does not contain all the information, we add them here.
     if ( !mDataSource.contains( QLatin1String( "crs=" ) ) && !mDataSource.contains( QLatin1String( "format=" ) ) )
     {
-      QgsDebugMsgLevel( "Old WMS URI format detected -> adding params", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "Old WMS URI format detected -> adding params" ), 4 );
       QgsDataSourceUri uri;
       uri.setEncodedUri( mDataSource );
       QDomElement layerElement = rpNode.firstChildElement( QStringLiteral( "wmsSublayer" ) );
@@ -1498,7 +1703,7 @@ bool QgsRasterLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &c
     // TODO: very bad, we have to load twice!!! Make QgsDataProvider::timestamp() static?
     if ( stamp < mDataProvider->dataTimestamp() )
     {
-      QgsDebugMsg( "data changed, reload provider" );
+      QgsDebugMsg( QStringLiteral( "data changed, reload provider" ) );
       closeDataProvider();
       init();
       setDataProvider( mProviderKey );
@@ -1517,7 +1722,7 @@ bool QgsRasterLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &c
     QDomElement bandElement = noDataBandList.at( i ).toElement();
     bool ok;
     int bandNo = bandElement.attribute( QStringLiteral( "bandNo" ) ).toInt( &ok );
-    QgsDebugMsgLevel( QString( "bandNo = %1" ).arg( bandNo ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "bandNo = %1" ).arg( bandNo ), 4 );
     if ( ok && ( bandNo > 0 ) && ( bandNo <= mDataProvider->bandCount() ) )
     {
       mDataProvider->setUseSourceNoDataValue( bandNo, bandElement.attribute( QStringLiteral( "useSrcNoData" ) ).toInt() );
@@ -1531,7 +1736,7 @@ bool QgsRasterLayer::readXml( const QDomNode &layer_node, QgsReadWriteContext &c
         QDomElement rangeElement = rangeList.at( j ).toElement();
         QgsRasterRange myNoDataRange( rangeElement.attribute( QStringLiteral( "min" ) ).toDouble(),
                                       rangeElement.attribute( QStringLiteral( "max" ) ).toDouble() );
-        QgsDebugMsgLevel( QString( "min = %1 %2" ).arg( rangeElement.attribute( "min" ) ).arg( myNoDataRange.min() ), 4 );
+        QgsDebugMsgLevel( QStringLiteral( "min = %1 %2" ).arg( rangeElement.attribute( "min" ) ).arg( myNoDataRange.min() ), 4 );
         myNoDataRangeList << myNoDataRange;
       }
       mDataProvider->setUserNoDataValue( bandNo, myNoDataRangeList );
@@ -1646,6 +1851,32 @@ bool QgsRasterLayer::writeXml( QDomNode &layer_node,
   return writeSymbology( layer_node, document, errorMsg, context );
 }
 
+// TODO: this should ideally go to gdal provider (together with most of encodedSource() + decodedSource())
+static bool _parseGpkgColons( const QString &src, QString &filename, QString &tablename )
+{
+  // GDAL accepts the following input format:  GPKG:filename:table
+  // (GDAL won't accept quoted filename)
+
+  QStringList lst = src.split( ':' );
+  if ( lst.count() != 3 && lst.count() != 4 )
+    return false;
+
+  tablename = lst.last();
+  if ( lst.count() == 3 )
+  {
+    filename = lst[1];
+    return true;
+  }
+  else if ( lst.count() == 4 && lst[1].count() == 1 && ( lst[2][0] == '/' || lst[2][0] == '\\' ) )
+  {
+    // a bit of handling to make sure that filename C:\hello.gpkg is parsed correctly
+    filename = lst[1] + ":" + lst[2];
+    return true;
+  }
+  return false;
+}
+
+
 QString QgsRasterLayer::encodedSource( const QString &source, const QgsReadWriteContext &context ) const
 {
   QString src( source );
@@ -1665,6 +1896,17 @@ QString QgsRasterLayer::encodedSource( const QString &source, const QgsReadWrite
         if ( filename.startsWith( '"' ) && filename.endsWith( '"' ) )
           filename = filename.mid( 1, filename.length() - 2 );
         src = "NETCDF:\"" + context.pathResolver().writePath( filename ) + "\":" + r.cap( 2 );
+        handled = true;
+      }
+    }
+    else if ( src.startsWith( QLatin1String( "GPKG:" ) ) )
+    {
+      // GPKG:filename:table
+      QString filename, tablename;
+      if ( _parseGpkgColons( src, filename, tablename ) )
+      {
+        filename = context.pathResolver().writePath( filename );
+        src = QStringLiteral( "GPKG:%1:%2" ).arg( filename, tablename );
         handled = true;
       }
     }
@@ -1736,7 +1978,7 @@ QString QgsRasterLayer::decodedSource( const QString &source, const QString &pro
     if ( !src.contains( QLatin1String( "type=" ) ) &&
          !src.contains( QLatin1String( "crs=" ) ) && !src.contains( QLatin1String( "format=" ) ) )
     {
-      QgsDebugMsg( "Old WMS URI format detected -> converting to new format" );
+      QgsDebugMsg( QStringLiteral( "Old WMS URI format detected -> converting to new format" ) );
       QgsDataSourceUri uri;
       if ( !src.startsWith( QLatin1String( "http:" ) ) )
       {
@@ -1817,6 +2059,17 @@ QString QgsRasterLayer::decodedSource( const QString &source, const QString &pro
           handled = true;
         }
       }
+      else if ( src.startsWith( QLatin1String( "GPKG:" ) ) )
+      {
+        // GPKG:filename:table
+        QString filename, tablename;
+        if ( _parseGpkgColons( src, filename, tablename ) )
+        {
+          filename = context.pathResolver().readPath( filename );
+          src = QStringLiteral( "GPKG:%1:%2" ).arg( filename, tablename );
+          handled = true;
+        }
+      }
       else if ( src.startsWith( QLatin1String( "HDF4_SDS:" ) ) )
       {
         // HDF4_SDS:subdataset_type:file_name:subdataset_index
@@ -1884,11 +2137,11 @@ int QgsRasterLayer::height() const
 /////////////////////////////////////////////////////////
 bool QgsRasterLayer::update()
 {
-  QgsDebugMsgLevel( "entered.", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "entered." ), 4 );
   // Check if data changed
   if ( mDataProvider->dataTimestamp() > mDataProvider->timestamp() )
   {
-    QgsDebugMsgLevel( "reload data", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "reload data" ), 4 );
     closeDataProvider();
     init();
     QgsDataProvider::ProviderOptions providerOptions;

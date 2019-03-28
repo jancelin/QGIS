@@ -298,7 +298,7 @@ class CORE_EXPORT QgsPointXY
     SIP_PYOBJECT __repr__();
     % MethodCode
     QString str = QStringLiteral( "<QgsPointXY: %1>" ).arg( sipCpp->asWkt() );
-    sipRes = PyUnicode_FromString( str.toUtf8().data() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
     % End
 
     int __len__();
@@ -340,7 +340,7 @@ class CORE_EXPORT QgsPointXY
 
     friend uint qHash( const QgsPointXY &pnt );
 
-}; // class QgsPoint
+}; // class QgsPointXY
 
 Q_DECLARE_METATYPE( QgsPointXY )
 

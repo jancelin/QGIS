@@ -24,6 +24,7 @@
 #include "qgsproperty.h"
 #include "qgscoordinatereferencesystem.h"
 #include "qgsfeaturesource.h"
+#include "qgsprocessingutils.h"
 #include <QMap>
 #include <limits>
 
@@ -358,7 +359,6 @@ class CORE_EXPORT QgsProcessingParameterDefinition
     /**
      * Returns a string version of the parameter input \a value, which is suitable for use as an input
      * parameter value when running an algorithm directly from a Python command.
-     * The returned value must be correctly escaped - e.g. string values must be wrapped in ' 's.
      */
     virtual QString valueAsPythonString( const QVariant &value, QgsProcessingContext &context ) const;
 
@@ -662,7 +662,7 @@ class CORE_EXPORT QgsProcessingParameters
      */
     static QgsFeatureSink *parameterAsSink( const QgsProcessingParameterDefinition *definition, const QVariantMap &parameters,
                                             const QgsFields &fields, QgsWkbTypes::Type geometryType, const QgsCoordinateReferenceSystem &crs,
-                                            QgsProcessingContext &context, QString &destinationIdentifier SIP_OUT ) SIP_FACTORY;
+                                            QgsProcessingContext &context, QString &destinationIdentifier SIP_OUT, QgsFeatureSink::SinkFlags sinkFlags = nullptr ) SIP_FACTORY;
 
     /**
      * Evaluates the parameter with matching \a definition and \a value to a feature sink.
@@ -681,7 +681,7 @@ class CORE_EXPORT QgsProcessingParameters
      */
     static QgsFeatureSink *parameterAsSink( const QgsProcessingParameterDefinition *definition, const QVariant &value,
                                             const QgsFields &fields, QgsWkbTypes::Type geometryType, const QgsCoordinateReferenceSystem &crs,
-                                            QgsProcessingContext &context, QString &destinationIdentifier SIP_OUT ) SIP_FACTORY;
+                                            QgsProcessingContext &context, QString &destinationIdentifier SIP_OUT, QgsFeatureSink::SinkFlags sinkFlags = nullptr ) SIP_FACTORY;
 
     /**
      * Evaluates the parameter with matching \a definition to a feature source.
@@ -1358,7 +1358,19 @@ class CORE_EXPORT QgsProcessingParameterMultipleLayers : public QgsProcessingPar
  * \class QgsProcessingParameterNumber
  * \ingroup core
  * A numeric parameter for processing algorithms.
-  * \since QGIS 3.0
+ *
+ * For numeric parameters with a dataType() of Double, the number of decimals places
+ * shown in the parameter's widget can be specified by setting the parameter's metadata. For example:
+ *
+ * * \code{.py}
+ *   param = QgsProcessingParameterNumber( 'VAL', 'Threshold', type=QgsProcessingParameter.Double)
+ *   # only show two decimal places in parameter's widgets, not 6:
+ *   param.setMetadata( {'widget_wrapper':
+ *     { 'decimals': 2 }
+ *   })
+ * \endcode
+ *
+ * \since QGIS 3.0
  */
 class CORE_EXPORT QgsProcessingParameterNumber : public QgsProcessingParameterDefinition
 {
@@ -1448,7 +1460,19 @@ class CORE_EXPORT QgsProcessingParameterNumber : public QgsProcessingParameterDe
  * \ingroup core
  * A double numeric parameter for distance values. Linked to a source layer or CRS parameter
  * to determine what units the distance values are in.
-  * \since QGIS 3.2
+ *
+ * The number of decimals places shown in a distance parameter's widget can be specified by
+ * setting the parameter's metadata. For example:
+ *
+ * * \code{.py}
+ *   param = QgsProcessingParameterDistance( 'VAL', 'Threshold')
+ *   # only show two decimal places in parameter's widgets, not 6:
+ *   param.setMetadata( {'widget_wrapper':
+ *     { 'decimals': 2 }
+ *   })
+ * \endcode
+ *
+ * \since QGIS 3.2
  */
 class CORE_EXPORT QgsProcessingParameterDistance : public QgsProcessingParameterNumber
 {
@@ -1486,12 +1510,29 @@ class CORE_EXPORT QgsProcessingParameterDistance : public QgsProcessingParameter
      */
     void setParentParameterName( const QString &parentParameterName );
 
+    /**
+     * Returns the default distance unit for the parameter.
+     *
+     * \see setDefaultUnit()
+     * \since QGIS 3.4.3
+     */
+    QgsUnitTypes::DistanceUnit defaultUnit() const { return mDefaultUnit; }
+
+    /**
+     * Sets the default distance \a unit for the parameter.
+     *
+     * \see defaultUnit()
+     * \since QGIS 3.4.3
+     */
+    void setDefaultUnit( QgsUnitTypes::DistanceUnit unit ) { mDefaultUnit = unit; }
+
     QVariantMap toVariantMap() const override;
     bool fromVariantMap( const QVariantMap &map ) override;
 
   private:
 
     QString mParentParameterName;
+    QgsUnitTypes::DistanceUnit mDefaultUnit = QgsUnitTypes::DistanceUnknownUnit;
 
 };
 

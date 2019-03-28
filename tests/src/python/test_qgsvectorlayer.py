@@ -66,6 +66,8 @@ from qgis.testing import start_app, unittest
 from featuresourcetestbase import FeatureSourceTestCase
 from utilities import unitTestDataPath
 
+TEST_DATA_DIR = unitTestDataPath()
+
 start_app()
 
 
@@ -182,6 +184,25 @@ def dumpEditBuffer(layer):
     print("CHANGED GEOM:")
     for fid, geom in editBuffer.changedGeometries().items():
         print(("%d | %s" % (f.id(), f.geometry().asWkt())))
+
+
+class TestQgsVectorLayerShapefile(unittest.TestCase, FeatureSourceTestCase):
+
+    """
+    Tests a vector layer against the feature source tests, using a real layer source (not a memory layer)
+    """
+    @classmethod
+    def getSource(cls):
+        vl = QgsVectorLayer(os.path.join(TEST_DATA_DIR, 'provider', 'shapefile.shp'), 'test')
+        assert (vl.isValid())
+        return vl
+
+    @classmethod
+    def setUpClass(cls):
+        """Run before all tests"""
+        QgsGui.editorWidgetRegistry().initEditors()
+        # Create test layer for FeatureSourceTestCase
+        cls.source = cls.getSource()
 
 
 class TestQgsVectorLayer(unittest.TestCase, FeatureSourceTestCase):
@@ -1894,13 +1915,13 @@ class TestQgsVectorLayer(unittest.TestCase, FeatureSourceTestCase):
 
         # check value
         f = next(temp_layer.getFeatures())
-        expected = 1009089817.0
+        expected = 1005721496.7800847
         self.assertAlmostEqual(f['area'], expected, delta=1.0)
 
         # change project area unit, check calculation respects unit
         QgsProject.instance().setAreaUnits(QgsUnitTypes.AreaSquareMiles)
         f = next(temp_layer.getFeatures())
-        expected = 389.6117565069
+        expected = 388.31124079933016
         self.assertAlmostEqual(f['area'], expected, 3)
 
     def test_ExpressionFilter(self):

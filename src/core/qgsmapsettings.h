@@ -48,10 +48,12 @@ class QgsMapRendererJob;
  * In order to set up QgsMapSettings instance, it is necessary to set at least
  * few members: extent, output size and layers.
  *
- * QgsMapSettings and QgsMapRendererJob (+subclasses) are intended to replace
- * QgsMapRenderer class that existed before QGIS 2.4. The advantage of the new
- * classes is that they separate the settings from the rendering and provide
- * asynchronous API for map rendering.
+ * Some systems use high DPI scaling that is an alternative to the traditional
+ * DPI scaling. The operating system provides Qt with a scaling ratio and it
+ * scales window, event, and desktop geometry. The Cocoa platform plugin sets
+ * the scaling ratio as QWindow::devicePixelRatio().
+ * To properly render the map on such systems, the map settings device pixel
+ * ratio shall be set accordingly.
  *
  * \since QGIS 2.4
  */
@@ -80,6 +82,28 @@ class CORE_EXPORT QgsMapSettings
     QSize outputSize() const;
     //! Sets the size of the resulting map image
     void setOutputSize( QSize size );
+
+    /**
+     * Returns device pixel ratio
+     * Common values are 1 for normal-dpi displays and 2 for high-dpi "retina" displays.
+     * \since QGIS 3.4
+     */
+    float devicePixelRatio() const;
+
+    /**
+     * Sets the device pixel ratio
+     * Common values are 1 for normal-dpi displays and 2 for high-dpi "retina" displays.
+     * \since QGIS 3.4
+     */
+    void setDevicePixelRatio( float dpr );
+
+    /**
+     * Returns the device output size of the map canvas
+     * This is equivalent to the output size multiplicated
+     * by the device pixel ratio.
+     * \since QGIS 3.4
+     */
+    QSize deviceOutputSize() const;
 
     /**
      * Returns the rotation of the resulting map image, in degrees clockwise.
@@ -228,6 +252,34 @@ class CORE_EXPORT QgsMapSettings
     Flags flags() const;
     //! Check whether a particular flag is enabled
     bool testFlag( Flag flag ) const;
+
+    /**
+     * Returns the text render format, which dictates how text is rendered (e.g. as paths or real text objects).
+     *
+     * \see setTextRenderFormat()
+     * \since QGIS 3.4.3
+     */
+    QgsRenderContext::TextRenderFormat textRenderFormat() const
+    {
+      return mTextRenderFormat;
+    }
+
+    /**
+     * Sets the text render \a format, which dictates how text is rendered (e.g. as paths or real text objects).
+     *
+     * \warning Calling the setLabelingEngineSettings() method will reset the text render format to match the default
+     * text render format from the label engine settings.
+     *
+     * \see textRenderFormat()
+     * \since QGIS 3.4.3
+     */
+    void setTextRenderFormat( QgsRenderContext::TextRenderFormat format )
+    {
+      mTextRenderFormat = format;
+      // ensure labeling engine setting is also kept in sync, just in case anyone accesses QgsMapSettings::labelingEngineSettings().defaultTextRenderFormat()
+      // instead of correctly calling QgsMapSettings::textRenderFormat(). It can't hurt to be consistent!
+      mLabelingEngineSettings.setDefaultTextRenderFormat( format );
+    }
 
     //! sets format of internal QImage
     void setOutputImageFormat( QImage::Format format ) { mImageFormat = format; }
@@ -387,13 +439,26 @@ class CORE_EXPORT QgsMapSettings
     QgsAbstractGeometry::SegmentationToleranceType segmentationToleranceType() const { return mSegmentationToleranceType; }
 
     /**
-     * Sets global configuration of the labeling engine
+     * Sets the global configuration of the labeling engine.
+     *
+     * \note Calling this method will reset the textRenderFormat() to match the default
+     * text render format from the label engine \a settings.
+     *
+     * \see labelingEngineSettings()
+     *
      * \since QGIS 3.0
      */
-    void setLabelingEngineSettings( const QgsLabelingEngineSettings &settings ) { mLabelingEngineSettings = settings; }
+    void setLabelingEngineSettings( const QgsLabelingEngineSettings &settings )
+    {
+      mLabelingEngineSettings = settings;
+      mTextRenderFormat = settings.defaultTextRenderFormat();
+    }
 
     /**
-     * Returns global configuration of the labeling engine
+     * Returns the global configuration of the labeling engine.
+     *
+     * \see setLabelingEngineSettings()
+     *
      * \since QGIS 3.0
      */
     const QgsLabelingEngineSettings &labelingEngineSettings() const { return mLabelingEngineSettings; }
@@ -403,6 +468,7 @@ class CORE_EXPORT QgsMapSettings
     double mDpi;
 
     QSize mSize;
+    float mDevicePixelRatio = 1.0;
 
     QgsRectangle mExtent;
 
@@ -444,6 +510,8 @@ class CORE_EXPORT QgsMapSettings
     QgsCoordinateTransformContext mTransformContext;
 
     QgsPathResolver mPathResolver;
+
+    QgsRenderContext::TextRenderFormat mTextRenderFormat = QgsRenderContext::TextFormatAlwaysOutlines;
 
 #ifdef QGISDEBUG
     bool mHasTransformContext = false;

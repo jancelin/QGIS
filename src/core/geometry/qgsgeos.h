@@ -120,7 +120,7 @@ class CORE_EXPORT QgsGeos: public QgsGeometryEngine
     /**
      * Creates a new QgsGeometry object, feeding in a geometry in GEOS format.
      */
-    static QgsGeometry geometryFromGeos( geos::unique_ptr geos );
+    static QgsGeometry geometryFromGeos( const geos::unique_ptr &geos );
 
     /**
      * Adds a new island polygon to a multipolygon feature
@@ -218,7 +218,7 @@ class CORE_EXPORT QgsGeos: public QgsGeometryEngine
     bool relatePattern( const QgsAbstractGeometry *geom, const QString &pattern, QString *errorMsg = nullptr ) const override;
     double area( QString *errorMsg = nullptr ) const override;
     double length( QString *errorMsg = nullptr ) const override;
-    bool isValid( QString *errorMsg = nullptr ) const override;
+    bool isValid( QString *errorMsg = nullptr, bool allowSelfTouchingHoles = false, QgsGeometry *errorLoc = nullptr ) const override;
     bool isEqual( const QgsAbstractGeometry *geom, QString *errorMsg = nullptr ) const override;
     bool isEmpty( QString *errorMsg = nullptr ) const override;
     bool isSimple( QString *errorMsg = nullptr ) const override;

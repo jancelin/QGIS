@@ -31,8 +31,6 @@ void QgsSnapToGridCanvasItem::paint( QPainter *painter )
 
   painter->save();
   QgsRectangle mapRect = mMapCanvas->extent();
-  if ( rect() != mapRect )
-    setRect( mapRect );
 
   painter->setRenderHints( QPainter::Antialiasing );
   painter->setCompositionMode( QPainter::CompositionMode_Difference );
@@ -145,11 +143,17 @@ void QgsSnapToGridCanvasItem::updateZoomFactor()
   {
     const int threshold = 5;
 
+    const QgsRectangle extent = mMapCanvas->extent();
+    if ( extent != rect() )
+      setRect( extent );
+
     const QgsPointXY centerPoint = mMapCanvas->extent().center();
     const QPointF canvasCenter = toCanvasCoordinates( centerPoint );
 
-    const QgsPointXY pt1 = mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( canvasCenter.x() - threshold, canvasCenter.y() - threshold );
-    const QgsPointXY pt2 = mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( canvasCenter.x() + threshold, canvasCenter.y() + threshold );
+    const QgsPointXY pt1 = mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( static_cast<int>( canvasCenter.x() - threshold ),
+                           static_cast<int>( canvasCenter.y() - threshold ) );
+    const QgsPointXY pt2 = mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( static_cast<int>( canvasCenter.x() + threshold ),
+                           static_cast<int>( canvasCenter.y() + threshold ) );
 
     const QgsPointXY layerPt1 = mTransform.transform( pt1, QgsCoordinateTransform::ReverseTransform );
     const QgsPointXY layerPt2 = mTransform.transform( pt2, QgsCoordinateTransform::ReverseTransform );

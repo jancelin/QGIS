@@ -121,7 +121,6 @@ class ScriptEditorDialog(BASE, WIDGET):
         if filePath is not None:
             self._loadFile(filePath)
 
-        self.needUpdate = False
         self.setHasChanged(False)
 
     def update_dialog_title(self):
@@ -150,20 +149,14 @@ class ScriptEditorDialog(BASE, WIDGET):
                 QMessageBox.Save | QMessageBox.Cancel | QMessageBox.Discard, QMessageBox.Cancel)
 
             if ret == QMessageBox.Save:
-                self.updateProvider()
                 self.saveScript(False)
                 event.accept()
             elif ret == QMessageBox.Discard:
-                self.updateProvider()
                 event.accept()
             else:
                 event.ignore()
         else:
             event.accept()
-
-    def updateProvider(self):
-        if self.needUpdate:
-            QgsApplication.processingRegistry().providerById("script").refreshAlgorithms()
 
     def openScript(self):
         if self.hasChanged:
@@ -218,8 +211,10 @@ class ScriptEditorDialog(BASE, WIDGET):
                                     self.tr("Unable to save edits:\n{}").format(str(e))
                                     )
                 return
-            self.needUpdate = True
+
             self.setHasChanged(False)
+
+        QgsApplication.processingRegistry().providerById("script").refreshAlgorithms()
 
     def setHasChanged(self, hasChanged):
         self.hasChanged = hasChanged
@@ -253,9 +248,9 @@ class ScriptEditorDialog(BASE, WIDGET):
         alg.setProvider(QgsApplication.processingRegistry().providerById("script"))
         alg.initAlgorithm()
 
-        dlg = alg.createCustomParametersWidget(self)
+        dlg = alg.createCustomParametersWidget(iface.mainWindow())
         if not dlg:
-            dlg = AlgorithmDialog(alg)
+            dlg = AlgorithmDialog(alg, parent=iface.mainWindow())
 
         canvas = iface.mapCanvas()
         prevMapTool = canvas.mapTool()

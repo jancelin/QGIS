@@ -157,10 +157,10 @@ class GdalUtils:
                 if extensions:
                     GdalUtils.supportedRasters[shortName] = extensions
                     # Only creatable rasters can be referenced in output rasters
-                    if ((gdal.DCAP_CREATE in metadata
-                         and metadata[gdal.DCAP_CREATE] == 'YES')
-                        or (gdal.DCAP_CREATECOPY in metadata
-                            and metadata[gdal.DCAP_CREATECOPY] == 'YES')):
+                    if ((gdal.DCAP_CREATE in metadata and
+                         metadata[gdal.DCAP_CREATE] == 'YES') or
+                        (gdal.DCAP_CREATECOPY in metadata and
+                            metadata[gdal.DCAP_CREATECOPY] == 'YES')):
                         GdalUtils.supportedOutputRasters[shortName] = extensions
 
         return GdalUtils.supportedRasters
@@ -241,28 +241,10 @@ class GdalUtils:
         return gdal.VersionInfo('RELEASE_NAME')
 
     @staticmethod
-    def gdalHelpPath():
-        helpPath = ProcessingConfig.getSetting(GdalUtils.GDAL_HELP_PATH)
-
-        if helpPath is None:
-            if isWindows():
-                pass
-            elif isMac():
-                pass
-            else:
-                searchPaths = ['/usr/share/doc/libgdal-doc/gdal']
-                for path in searchPaths:
-                    if os.path.exists(path):
-                        helpPath = os.path.abspath(path)
-                        break
-
-        return helpPath if helpPath is not None else 'http://www.gdal.org/'
-
-    @staticmethod
-    def ogrConnectionString(uri, context):
-        """Generates OGR connection string from layer source
+    def ogrConnectionStringFromLayer(layer):
+        """Generates OGR connection string from a layer
         """
-        return GdalUtils.ogrConnectionStringAndFormat(uri, context)[0]
+        return GdalUtils.ogrConnectionStringAndFormatFromLayer(layer)[0]
 
     @staticmethod
     def ogrConnectionStringAndFormat(uri, context):
@@ -371,11 +353,13 @@ class GdalUtils:
         return ogrstr, '"' + format + '"'
 
     @staticmethod
+    def ogrOutputLayerName(uri):
+        uri = uri.strip('"')
+        return os.path.basename(os.path.splitext(uri)[0])
+
+    @staticmethod
     def ogrLayerName(uri):
         uri = uri.strip('"')
-        #if os.path.isfile(uri):
-        #    return os.path.basename(os.path.splitext(uri)[0])
-
         if ' table=' in uri:
             # table="schema"."table"
             re_table_schema = re.compile(' table="([^"]*)"\\."([^"]*)"')
@@ -424,7 +408,7 @@ class GdalUtils:
 
     @staticmethod
     def writeLayerParameterToTextFile(filename, alg, parameters, parameter_name, context, quote=True, executing=False):
-        listFile = os.path.join(QgsProcessingUtils.tempFolder(), filename)
+        listFile = QgsProcessingUtils.generateTempFilename(filename)
         with open(listFile, 'w') as f:
             if executing:
                 layers = []

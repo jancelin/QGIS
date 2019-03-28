@@ -115,7 +115,7 @@ QgsLayoutAttributeTableWidget::QgsLayoutAttributeTableWidget( QgsLayoutFrame *fr
   mBackgroundColorButton->setAllowOpacity( true );
   mBackgroundColorButton->setContext( QStringLiteral( "composer" ) );
   mBackgroundColorButton->setShowNoColor( true );
-  mBackgroundColorButton->setNoColorString( tr( "No background" ) );
+  mBackgroundColorButton->setNoColorString( tr( "No Background" ) );
 
   updateGuiElements();
 
@@ -204,7 +204,7 @@ void QgsLayoutAttributeTableWidget::mAttributesPushButton_clicked()
     return;
   }
 
-  //make deep copy of current columns, so we can restore them in case of cancelation
+  //make deep copy of current columns, so we can restore them in case of cancellation
   QVector<QgsLayoutTableColumn *> currentColumns;
   auto it = mTable->columns().constBegin();
   for ( ; it != mTable->columns().constEnd() ; ++it )
@@ -482,6 +482,8 @@ void QgsLayoutAttributeTableWidget::updateGuiElements()
 
   mEmptyFrameCheckBox->setChecked( mFrame->hidePageIfEmpty() );
   mHideEmptyBgCheckBox->setChecked( mFrame->hideBackgroundIfEmpty() );
+
+  updateDataDefinedButton( mLayerSourceDDBtn );
 
   toggleSourceControls();
 

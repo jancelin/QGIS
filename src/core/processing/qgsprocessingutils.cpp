@@ -29,6 +29,7 @@
 #include "qgsexpressioncontextscopegenerator.h"
 #include "qgsfileutils.h"
 #include "qgsvectorlayer.h"
+#include "qgsproviderregistry.h"
 
 QList<QgsRasterLayer *> QgsProcessingUtils::compatibleRasterLayers( QgsProject *project, bool sort )
 {
@@ -349,8 +350,9 @@ QString QgsProcessingUtils::stringToPythonLiteral( const QString &string )
   return s;
 }
 
-void QgsProcessingUtils::parseDestinationString( QString &destination, QString &providerKey, QString &uri, QString &layerName, QString &format, QMap<QString, QVariant> &options, bool &useWriter )
+void QgsProcessingUtils::parseDestinationString( QString &destination, QString &providerKey, QString &uri, QString &layerName, QString &format, QMap<QString, QVariant> &options, bool &useWriter, QString &extension )
 {
+  extension.clear();
   QRegularExpression splitRx( QStringLiteral( "^(.{3,}?):(.*)$" ) );
   QRegularExpressionMatch match = splitRx.match( destination );
   if ( match.hasMatch() )
@@ -372,6 +374,12 @@ void QgsProcessingUtils::parseDestinationString( QString &destination, QString &
           options.insert( QStringLiteral( "layerName" ), layerName );
         }
         uri = dsUri.database();
+        extension = QFileInfo( uri ).completeSuffix();
+        format = QgsVectorFileWriter::driverForExtension( extension );
+      }
+      else
+      {
+        extension = QFileInfo( uri ).completeSuffix();
       }
       options.insert( QStringLiteral( "update" ), true );
     }
@@ -383,7 +391,6 @@ void QgsProcessingUtils::parseDestinationString( QString &destination, QString &
     providerKey = QStringLiteral( "ogr" );
     QRegularExpression splitRx( QStringLiteral( "^(.*)\\.(.*?)$" ) );
     QRegularExpressionMatch match = splitRx.match( destination );
-    QString extension;
     if ( match.hasMatch() )
     {
       extension = match.captured( 2 );
@@ -401,7 +408,7 @@ void QgsProcessingUtils::parseDestinationString( QString &destination, QString &
   }
 }
 
-QgsFeatureSink *QgsProcessingUtils::createFeatureSink( QString &destination, QgsProcessingContext &context, const QgsFields &fields, QgsWkbTypes::Type geometryType, const QgsCoordinateReferenceSystem &crs, const QVariantMap &createOptions )
+QgsFeatureSink *QgsProcessingUtils::createFeatureSink( QString &destination, QgsProcessingContext &context, const QgsFields &fields, QgsWkbTypes::Type geometryType, const QgsCoordinateReferenceSystem &crs, const QVariantMap &createOptions, QgsFeatureSink::SinkFlags sinkFlags )
 {
   QVariantMap options = createOptions;
   if ( !options.contains( QStringLiteral( "fileEncoding" ) ) )
@@ -441,16 +448,18 @@ QgsFeatureSink *QgsProcessingUtils::createFeatureSink( QString &destination, Qgs
     QString uri;
     QString layerName;
     QString format;
+    QString extension;
     bool useWriter = false;
-    parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+    parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
 
+    QgsFields newFields = fields;
     if ( useWriter && providerKey == QLatin1String( "ogr" ) )
     {
       // use QgsVectorFileWriter for OGR destinations instead of QgsVectorLayerImport, as that allows
       // us to use any OGR format which supports feature addition
       QString finalFileName;
-      std::unique_ptr< QgsVectorFileWriter > writer = qgis::make_unique< QgsVectorFileWriter >( destination, options.value( QStringLiteral( "fileEncoding" ) ).toString(), fields, geometryType, crs, format, QgsVectorFileWriter::defaultDatasetOptions( format ),
-          QgsVectorFileWriter::defaultLayerOptions( format ), &finalFileName );
+      std::unique_ptr< QgsVectorFileWriter > writer = qgis::make_unique< QgsVectorFileWriter >( destination, options.value( QStringLiteral( "fileEncoding" ) ).toString(), newFields, geometryType, crs, format, QgsVectorFileWriter::defaultDatasetOptions( format ),
+          QgsVectorFileWriter::defaultLayerOptions( format ), &finalFileName, QgsVectorFileWriter::NoSymbology, sinkFlags );
 
       if ( writer->hasError() )
       {
@@ -462,7 +471,7 @@ QgsFeatureSink *QgsProcessingUtils::createFeatureSink( QString &destination, Qgs
     else
     {
       //create empty layer
-      std::unique_ptr< QgsVectorLayerExporter > exporter( new QgsVectorLayerExporter( uri, providerKey, fields, geometryType, crs, true, options ) );
+      std::unique_ptr< QgsVectorLayerExporter > exporter( new QgsVectorLayerExporter( uri, providerKey, newFields, geometryType, crs, true, options, sinkFlags ) );
       if ( exporter->errorCode() )
       {
         throw QgsProcessingException( QObject::tr( "Could not create layer %1: %2" ).arg( destination, exporter->errorMessage() ) );
@@ -628,11 +637,41 @@ QString QgsProcessingUtils::formatHelpMapAsHtml( const QVariantMap &map, const Q
 
 QString QgsProcessingUtils::convertToCompatibleFormat( const QgsVectorLayer *vl, bool selectedFeaturesOnly, const QString &baseName, const QStringList &compatibleFormats, const QString &preferredFormat, QgsProcessingContext &context, QgsProcessingFeedback *feedback )
 {
-  bool requiresTranslation = selectedFeaturesOnly;
-  if ( !selectedFeaturesOnly )
+  bool requiresTranslation = false;
+
+  // if we are only looking for selected features then we have to export back to disk,
+  // as we need to subset only selected features, a concept which doesn't exist outside QGIS!
+  requiresTranslation = requiresTranslation || selectedFeaturesOnly;
+
+  // if the data provider is NOT ogr, then we HAVE to convert. Otherwise we run into
+  // issues with data providers like spatialite, delimited text where the format can be
+  // opened outside of QGIS, but with potentially very different behavior!
+  requiresTranslation = requiresTranslation || vl->dataProvider()->name() != QLatin1String( "ogr" );
+
+  // if the layer has a feature filter set, then we HAVE to convert. Feature filters are
+  // a purely QGIS concept.
+  requiresTranslation = requiresTranslation || !vl->subsetString().isEmpty();
+
+  // Check if layer is a disk based format and if so if the layer's path has a compatible filename suffix
+  QString diskPath;
+  if ( !requiresTranslation )
   {
-    QFileInfo fi( vl->source() );
-    requiresTranslation = !compatibleFormats.contains( fi.suffix(), Qt::CaseInsensitive );
+    const QVariantMap parts = QgsProviderRegistry::instance()->decodeUri( vl->dataProvider()->name(), vl->source() );
+    if ( parts.contains( QStringLiteral( "path" ) ) )
+    {
+      diskPath = parts.value( QStringLiteral( "path" ) ).toString();
+      QFileInfo fi( diskPath );
+      requiresTranslation = !compatibleFormats.contains( fi.suffix(), Qt::CaseInsensitive );
+
+      // if the layer name doesn't match the filename, we need to convert the layer. This method can only return
+      // a filename, and cannot handle layernames as well as file paths
+      const QString layerName = parts.value( QStringLiteral( "layerName" ) ).toString();
+      requiresTranslation = requiresTranslation || ( !layerName.isEmpty() && layerName != fi.baseName() );
+    }
+    else
+    {
+      requiresTranslation = true; // not a disk-based format
+    }
   }
 
   if ( requiresTranslation )
@@ -658,7 +697,7 @@ QString QgsProcessingUtils::convertToCompatibleFormat( const QgsVectorLayer *vl,
   }
   else
   {
-    return vl->source();
+    return diskPath;
   }
 }
 

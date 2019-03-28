@@ -203,6 +203,8 @@ class TestPyQgsShapefileProvider(unittest.TestCase, ProviderTestCase):
                     'name = \'apple\'',
                     'name LIKE \'Apple\'',
                     'name LIKE \'aPple\'',
+                    'name LIKE \'Ap_le\'',
+                    'name LIKE \'Ap\\_le\'',
                     '"name"="name2"'])
 
     def testRepack(self):
@@ -482,6 +484,34 @@ class TestPyQgsShapefileProvider(unittest.TestCase, ProviderTestCase):
 
         vl = None
 
+    def testDontRepackOnReload(self):
+        ''' Test fix for #18421 '''
+
+        tmpdir = tempfile.mkdtemp()
+        self.dirs_to_cleanup.append(tmpdir)
+        srcpath = os.path.join(TEST_DATA_DIR, 'provider')
+        for file in glob.glob(os.path.join(srcpath, 'shapefile.*')):
+            shutil.copy(os.path.join(srcpath, file), tmpdir)
+        datasource = os.path.join(tmpdir, 'shapefile.shp')
+
+        vl = QgsVectorLayer('{}|layerid=0'.format(datasource), 'test', 'ogr')
+        feature_count = vl.featureCount()
+        # Start an iterator that will open a new connection
+        iterator = vl.getFeatures()
+        next(iterator)
+
+        # Delete another feature while in update mode
+        vl.dataProvider().enterUpdateMode()
+        vl.dataProvider().reloadData()
+        vl.dataProvider().deleteFeatures([0])
+
+        # Test that repacking has not been done (since in update mode)
+        ds = osgeo.ogr.Open(datasource)
+        self.assertTrue(ds.GetLayer(0).GetFeatureCount() == feature_count)
+        ds = None
+
+        vl = None
+
     def testRepackUnderFileLocks(self):
         ''' Test fix for #15570 and #15393 '''
 
@@ -614,8 +644,8 @@ class TestPyQgsShapefileProvider(unittest.TestCase, ProviderTestCase):
         self.assertTrue(vl.dataProvider().capabilities() & QgsVectorDataProvider.CreateSpatialIndex)
         self.assertTrue(vl.dataProvider().createSpatialIndex())
 
-    def testSubSetStringEditable_bug17795(self):
-        """Test that a layer is not editable after setting a subset and it's reverted to editable after the filter is removed"""
+    def testSubSetStringEditable_bug17795_but_with_modified_behavior(self):
+        """Test that a layer is still editable after setting a subset"""
 
         testPath = TEST_DATA_DIR + '/' + 'lines.shp'
         isEditable = QgsVectorDataProvider.ChangeAttributeValues
@@ -632,7 +662,7 @@ class TestPyQgsShapefileProvider(unittest.TestCase, ProviderTestCase):
         vl = QgsVectorLayer(testPath, 'subset_test', 'ogr')
         vl.setSubsetString('"Name" = \'Arterial\'')
         self.assertTrue(vl.isValid())
-        self.assertFalse(vl.dataProvider().capabilities() & isEditable)
+        self.assertTrue(vl.dataProvider().capabilities() & isEditable)
 
         vl.setSubsetString('')
         self.assertTrue(vl.dataProvider().capabilities() & isEditable)

@@ -22,6 +22,8 @@
 #include "qgis.h"
 #include "qgsdatumtransform.h"
 
+#include <QMetaType>
+#include <QExplicitlySharedDataPointer>
 class QgsCoordinateReferenceSystem;
 class QgsReadWriteContext;
 class QgsCoordinateTransformContextPrivate;
@@ -80,6 +82,7 @@ class CORE_EXPORT QgsCoordinateTransformContext
      */
     QgsCoordinateTransformContext &operator=( const QgsCoordinateTransformContext &rhs ) SIP_SKIP;
 
+    bool operator==( const QgsCoordinateTransformContext &rhs ) const ;
 
     /**
      * Clears all stored transform information from the context.
@@ -272,6 +275,8 @@ class CORE_EXPORT QgsCoordinateTransformContext
     QExplicitlySharedDataPointer<QgsCoordinateTransformContextPrivate> d;
 
 };
+
+Q_DECLARE_METATYPE( QgsCoordinateTransformContext )
 
 #endif // QGSCOORDINATETRANSFORMCONTEXT_H
 

@@ -18,7 +18,9 @@
 #include "qgsgeometryrubberband.h"
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
+
 
 QgsMapToolEllipseCenterPoint::QgsMapToolEllipseCenterPoint( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
@@ -53,6 +55,9 @@ void QgsMapToolEllipseCenterPoint::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 void QgsMapToolEllipseCenterPoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
   QgsPoint point = mapPoint( *e );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   if ( mTempRubberBand )
   {
     mEllipse = QgsEllipse().fromCenterPoint( mPoints.at( 0 ), point );

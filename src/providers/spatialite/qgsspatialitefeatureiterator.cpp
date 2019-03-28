@@ -238,7 +238,7 @@ bool QgsSpatiaLiteFeatureIterator::fetchFeature( QgsFeature &feature )
 
   if ( !sqliteStatement )
   {
-    QgsDebugMsg( "Invalid current SQLite statement" );
+    QgsDebugMsg( QStringLiteral( "Invalid current SQLite statement" ) );
     close();
     return false;
   }
@@ -355,6 +355,8 @@ bool QgsSpatiaLiteFeatureIterator::prepareStatement( const QString &whereClause,
     if ( limit >= 0 )
       sql += QStringLiteral( " LIMIT %1" ).arg( limit );
 
+    // qDebug() << sql;
+
     if ( sqlite3_prepare_v2( mHandle->handle(), sql.toUtf8().constData(), -1, &sqliteStatement, nullptr ) != SQLITE_OK )
     {
       // some error occurred
@@ -421,7 +423,7 @@ QString QgsSpatiaLiteFeatureIterator::whereClauseRect()
       mbrFilter += QStringLiteral( "ymax >= %1" ).arg( qgsDoubleToString( mFilterRect.yMinimum() ) );
       QString idxName = QStringLiteral( "idx_%1_%2" ).arg( mSource->mIndexTable, mSource->mIndexGeometry );
       whereClause += QStringLiteral( "%1 IN (SELECT pkid FROM %2 WHERE %3)" )
-                     .arg( quotedPrimaryKey(),
+                     .arg( QStringLiteral( "ROWID" ),
                            QgsSpatiaLiteProvider::quotedIdentifier( idxName ),
                            mbrFilter );
     }
@@ -430,7 +432,7 @@ QString QgsSpatiaLiteFeatureIterator::whereClauseRect()
       // using the MbrCache spatial index
       QString idxName = QStringLiteral( "cache_%1_%2" ).arg( mSource->mIndexTable, mSource->mIndexGeometry );
       whereClause += QStringLiteral( "%1 IN (SELECT rowid FROM %2 WHERE mbr = FilterMbrIntersects(%3))" )
-                     .arg( quotedPrimaryKey(),
+                     .arg( QStringLiteral( "ROWID" ),
                            QgsSpatiaLiteProvider::quotedIdentifier( idxName ),
                            mbr( mFilterRect ) );
     }
@@ -504,11 +506,11 @@ bool QgsSpatiaLiteFeatureIterator::getFeature( sqlite3_stmt *stmt, QgsFeature &f
   {
     if ( ic == 0 )
     {
-      if ( mHasPrimaryKey )
+      if ( mHasPrimaryKey && sqlite3_column_type( stmt, ic ) == SQLITE_INTEGER )
       {
         // first column always contains the ROWID (or the primary key)
         QgsFeatureId fid = sqlite3_column_int64( stmt, ic );
-        QgsDebugMsgLevel( QString( "fid=%1" ).arg( fid ), 3 );
+        QgsDebugMsgLevel( QStringLiteral( "fid=%1" ).arg( fid ), 3 );
         feature.setId( fid );
       }
       else

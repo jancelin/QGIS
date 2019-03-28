@@ -14,22 +14,21 @@ email                : matthias@opengis.ch
  ***************************************************************************/
 
 #include "qgssinglegeometrycheck.h"
+#include "qgsgeometrycheckcontext.h"
 #include "qgspoint.h"
 
-QgsSingleGeometryCheck::QgsSingleGeometryCheck( CheckType checkType, const QList<QgsWkbTypes::GeometryType> &compatibleGeometryTypes, QgsGeometryCheckerContext *context )
-  : QgsGeometryCheck( checkType, compatibleGeometryTypes, context )
-{
 
-}
 
-void QgsSingleGeometryCheck::collectErrors( QList<QgsGeometryCheckError *> &errors, QStringList &messages, QAtomicInt *progressCounter, const QMap<QString, QgsFeatureIds> &ids ) const
+void QgsSingleGeometryCheck::collectErrors( const QMap<QString, QgsFeaturePool *> &featurePools,
+    QList<QgsGeometryCheckError *> &errors,
+    QStringList &messages, QgsFeedback *feedback, const LayerFeatureIds &ids ) const
 {
   Q_UNUSED( messages )
-  QMap<QString, QgsFeatureIds> featureIds = ids.isEmpty() ? allLayerFeatureIds() : ids;
-  QgsGeometryCheckerUtils::LayerFeatures layerFeatures( mContext->featurePools, featureIds, mCompatibleGeometryTypes, progressCounter, mContext );
+  QMap<QString, QgsFeatureIds> featureIds = ids.isEmpty() ? allLayerFeatureIds( featurePools ) : ids.toMap();
+  QgsGeometryCheckerUtils::LayerFeatures layerFeatures( featurePools, featureIds, compatibleGeometryTypes(), feedback, mContext );
   for ( const QgsGeometryCheckerUtils::LayerFeature &layerFeature : layerFeatures )
   {
-    const auto singleErrors = processGeometry( layerFeature.geometry(), QVariantMap() );
+    const auto singleErrors = processGeometry( layerFeature.geometry() );
     for ( const auto error : singleErrors )
       errors.append( convertToGeometryCheckError( error, layerFeature ) );
   }
@@ -50,9 +49,9 @@ void QgsSingleGeometryCheckError::update( const QgsSingleGeometryCheckError *oth
 
 bool QgsSingleGeometryCheckError::isEqual( const QgsSingleGeometryCheckError *other ) const
 {
-  return mGeometry == other->mGeometry
+  return mGeometry.equals( other->mGeometry )
          && mCheck == other->mCheck
-         && mErrorLocation == other->mErrorLocation
+         && mErrorLocation.equals( other->mErrorLocation )
          && mVertexId == other->mVertexId;
 }
 
@@ -64,7 +63,7 @@ bool QgsSingleGeometryCheckError::handleChanges( const QList<QgsGeometryCheck::C
 
 QString QgsSingleGeometryCheckError::description() const
 {
-  return mCheck->errorDescription();
+  return mCheck->description();
 }
 
 const QgsSingleGeometryCheck *QgsSingleGeometryCheckError::check() const

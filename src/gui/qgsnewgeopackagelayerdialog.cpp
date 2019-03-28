@@ -50,7 +50,7 @@ QgsNewGeoPackageLayerDialog::QgsNewGeoPackageLayerDialog( QWidget *parent, Qt::W
   : QDialog( parent, fl )
 {
   setupUi( this );
-  QgsGui::instance()->enableAutoGeometryRestore( this );
+  QgsGui::enableAutoGeometryRestore( this );
 
   connect( mAddAttributeButton, &QToolButton::clicked, this, &QgsNewGeoPackageLayerDialog::mAddAttributeButton_clicked );
   connect( mRemoveAttributeButton, &QToolButton::clicked, this, &QgsNewGeoPackageLayerDialog::mRemoveAttributeButton_clicked );
@@ -261,7 +261,7 @@ bool QgsNewGeoPackageLayerDialog::apply()
         msgBox.setWindowTitle( tr( "New GeoPackage Layer" ) );
         msgBox.setText( tr( "The File already exists. Do you want to overwrite the existing file with a new database or add a new layer to it?" ) );
         QPushButton *overwriteButton = msgBox.addButton( tr( "Overwrite" ), QMessageBox::ActionRole );
-        QPushButton *addNewLayerButton = msgBox.addButton( tr( "Add new layer" ), QMessageBox::ActionRole );
+        QPushButton *addNewLayerButton = msgBox.addButton( tr( "Add New Layer" ), QMessageBox::ActionRole );
         msgBox.setStandardButtons( QMessageBox::Cancel );
         msgBox.setDefaultButton( addNewLayerButton );
         bool cancel = false;

@@ -66,7 +66,6 @@
 #include "qgslayerrestorer.h"
 #include "qgsdxfexport.h"
 #include "qgssymbollayerutils.h"
-#include "qgslayoutitemlegend.h"
 #include "qgsserverexception.h"
 
 #include <QImage>
@@ -80,6 +79,7 @@
 #include "qgslayoutmanager.h"
 #include "qgslayoutexporter.h"
 #include "qgslayoutsize.h"
+#include "qgslayoutrendercontext.h"
 #include "qgslayoutmeasurement.h"
 #include "qgsprintlayout.h"
 #include "qgslayoutpagecollection.h"
@@ -170,7 +170,7 @@ namespace QgsWms
     QList<QgsMapLayer *> layers;
     QList<QgsWmsParametersLayer> params = mWmsParameters.layersParameters();
 
-    QString sld = mWmsParameters.sld();
+    QString sld = mWmsParameters.sldBody();
     if ( !sld.isEmpty() )
       layers = sldStylizedLayers( sld );
     else
@@ -192,6 +192,16 @@ namespace QgsWms
     qreal dpmm = dotsPerMm();
     std::unique_ptr<QImage> image;
     std::unique_ptr<QPainter> painter;
+
+    // getting scale from bbox
+    if ( !mWmsParameters.bbox().isEmpty() )
+    {
+      QgsMapSettings mapSettings;
+      image.reset( createImage( mWmsParameters.widthAsInt(), mWmsParameters.heightAsInt(), false ) );
+      configureMapSettings( image.get(), mapSettings );
+      legendSettings.setMapScale( mapSettings.scale() );
+      legendSettings.setMapUnitsPerPixel( mapSettings.mapUnitsPerPixel() );
+    }
 
     if ( !mWmsParameters.rule().isEmpty() )
     {
@@ -312,7 +322,7 @@ namespace QgsWms
     restorer.reset( new QgsLayerRestorer( mNicknameLayers.values() ) );
 
     // init stylized layers according to LAYERS/STYLES or SLD
-    QString sld = mWmsParameters.sld();
+    QString sld = mWmsParameters.sldBody();
     if ( !sld.isEmpty() )
     {
       layers = sldStylizedLayers( sld );
@@ -396,6 +406,8 @@ namespace QgsWms
         if ( ok )
           exportSettings.dpi = dpi;
       }
+      // Draw selections
+      exportSettings.flags |= QgsLayoutRenderContext::FlagDrawSelection;
       QgsLayoutExporter exporter( layout.get() );
       exporter.exportToSvg( tempOutputFile.fileName(), exportSettings );
     }
@@ -413,6 +425,8 @@ namespace QgsWms
           dpi = _dpi;
       }
       exportSettings.dpi = dpi;
+      // Draw selections
+      exportSettings.flags |= QgsLayoutRenderContext::FlagDrawSelection;
       // Destination image size in px
       QgsLayoutSize layoutSize( layout->pageCollection()->page( 0 )->sizeWithUnits() );
       QgsLayoutMeasurement width( layout->convertFromLayoutUnits( layoutSize.width(), QgsUnitTypes::LayoutUnit::LayoutMillimeters ) );
@@ -435,6 +449,10 @@ namespace QgsWms
         if ( ok )
           exportSettings.dpi = dpi;
       }
+      // Draw selections
+      exportSettings.flags |= QgsLayoutRenderContext::FlagDrawSelection;
+      // Print as raster
+      exportSettings.rasterizeWholeImage = layout->customProperty( QStringLiteral( "rasterize" ), false ).toBool();
       // Export all pages
       QgsLayoutExporter exporter( layout.get() );
       exporter.exportToPdf( tempOutputFile.fileName(), exportSettings );
@@ -450,7 +468,7 @@ namespace QgsWms
 
   bool QgsRenderer::configurePrintLayout( QgsPrintLayout *c, const QgsMapSettings &mapSettings )
   {
-
+    c->renderContext().setSelectionColor( mapSettings.selectionColor() );
     // Maps are configured first
     QList<QgsLayoutItemMap *> maps;
     c->layoutItems<QgsLayoutItemMap>( maps );
@@ -661,7 +679,7 @@ namespace QgsWms
     restorer.reset( new QgsLayerRestorer( mNicknameLayers.values() ) );
 
     // init stylized layers according to LAYERS/STYLES or SLD
-    QString sld = mWmsParameters.sld();
+    QString sld = mWmsParameters.sldBody();
     if ( !sld.isEmpty() )
     {
       layers = sldStylizedLayers( sld );
@@ -749,7 +767,7 @@ namespace QgsWms
     restorer.reset( new QgsLayerRestorer( mNicknameLayers.values() ) );
 
     // init stylized layers according to LAYERS/STYLES or SLD
-    QString sld = mWmsParameters.sld();
+    QString sld = mWmsParameters.sldBody();
     if ( !sld.isEmpty() )
     {
       layers = sldStylizedLayers( sld );
@@ -903,7 +921,7 @@ namespace QgsWms
     restorer.reset( new QgsLayerRestorer( mNicknameLayers.values() ) );
 
     // init stylized layers according to LAYERS/STYLES or SLD
-    QString sld = mWmsParameters.sld();
+    QString sld = mWmsParameters.sldBody();
     if ( !sld.isEmpty() )
       layers = sldStylizedLayers( sld );
     else
@@ -933,8 +951,16 @@ namespace QgsWms
     QgsMapSettings mapSettings;
     std::unique_ptr<QImage> outputImage( createImage( imageWidth, imageHeight ) );
 
+    // The CRS parameter is considered as mandatory in configureMapSettings
+    // but in the case of filter parameter, CRS parameter has not to be mandatory
+    bool mandatoryCrsParam = true;
+    if ( filtersDefined && !ijDefined && !xyDefined && mWmsParameters.crs().isEmpty() )
+    {
+      mandatoryCrsParam = false;
+    }
+
     // configure map settings (background, DPI, ...)
-    configureMapSettings( outputImage.get(), mapSettings );
+    configureMapSettings( outputImage.get(), mapSettings, mandatoryCrsParam );
 
     QgsMessageLog::logMessage( "mapSettings.destinationCrs(): " +  mapSettings.destinationCrs().authid() );
     QgsMessageLog::logMessage( "mapSettings.extent(): " +  mapSettings.extent().toString() );
@@ -1069,7 +1095,7 @@ namespace QgsWms
     return image.release();
   }
 
-  void QgsRenderer::configureMapSettings( const QPaintDevice *paintDevice, QgsMapSettings &mapSettings ) const
+  void QgsRenderer::configureMapSettings( const QPaintDevice *paintDevice, QgsMapSettings &mapSettings, bool mandatoryCrsParam ) const
   {
     if ( !paintDevice )
     {
@@ -1091,6 +1117,10 @@ namespace QgsWms
     {
       crs = QString( "EPSG:4326" );
       mapExtent.invert();
+    }
+    else if ( crs.isEmpty() && !mandatoryCrsParam )
+    {
+      crs = QString( "EPSG:4326" );
     }
 
     QgsCoordinateReferenceSystem outputCRS;
@@ -1141,6 +1171,13 @@ namespace QgsWms
 
     // enable rendering optimization
     mapSettings.setFlag( QgsMapSettings::UseRenderingOptimization );
+
+    // set selection color
+    int myRed = mProject->readNumEntry( "Gui", "/SelectionColorRedPart", 255 );
+    int myGreen = mProject->readNumEntry( "Gui", "/SelectionColorGreenPart", 255 );
+    int myBlue = mProject->readNumEntry( "Gui", "/SelectionColorBluePart", 0 );
+    int myAlpha = mProject->readNumEntry( "Gui", "/SelectionColorAlphaPart", 255 );
+    mapSettings.setSelectionColor( QColor( myRed, myGreen, myBlue, myAlpha ) );
   }
 
   QDomDocument QgsRenderer::featureInfoDocument( QList<QgsMapLayer *> &layers, const QgsMapSettings &mapSettings,
@@ -2322,7 +2359,8 @@ namespace QgsWms
     double mapUnitTolerance = 0.0;
     if ( ml->geometryType() == QgsWkbTypes::PolygonGeometry )
     {
-      if ( ! mWmsParameters.polygonTolerance().isEmpty() )
+      if ( ! mWmsParameters.polygonTolerance().isEmpty()
+           && mWmsParameters.polygonToleranceAsInt() > 0 )
       {
         mapUnitTolerance = mWmsParameters.polygonToleranceAsInt() * rct.mapToPixel().mapUnitsPerPixel();
       }
@@ -2333,7 +2371,8 @@ namespace QgsWms
     }
     else if ( ml->geometryType() == QgsWkbTypes::LineGeometry )
     {
-      if ( ! mWmsParameters.lineTolerance().isEmpty() )
+      if ( ! mWmsParameters.lineTolerance().isEmpty()
+           && mWmsParameters.lineToleranceAsInt() > 0 )
       {
         mapUnitTolerance = mWmsParameters.lineToleranceAsInt() * rct.mapToPixel().mapUnitsPerPixel();
       }
@@ -2344,7 +2383,8 @@ namespace QgsWms
     }
     else //points
     {
-      if ( ! mWmsParameters.pointTolerance().isEmpty() )
+      if ( ! mWmsParameters.pointTolerance().isEmpty()
+           && mWmsParameters.pointToleranceAsInt() > 0 )
       {
         mapUnitTolerance = mWmsParameters.pointToleranceAsInt() * rct.mapToPixel().mapUnitsPerPixel();
       }
@@ -2407,8 +2447,9 @@ namespace QgsWms
     }
 
     // init groups
+    const QString rootName { QgsServerProjectUtils::wmsRootName( *mProject ) };
     const QgsLayerTreeGroup *root = mProject->layerTreeRoot();
-    initLayerGroupsRecursive( root, mProject->title() );
+    initLayerGroupsRecursive( root, rootName.isEmpty() ? mProject->title() : rootName );
   }
 
   void QgsRenderer::initLayerGroupsRecursive( const QgsLayerTreeGroup *group, const QString &groupName )
@@ -2493,7 +2534,7 @@ namespace QgsWms
       }
 
       // build url for vector layer
-      QString typeName = QgsWkbTypes::geometryDisplayString( param.mGeom.type() );
+      const QString typeName = QgsWkbTypes::displayString( param.mGeom.wkbType() );
       QString url = typeName + "?crs=" + crs;
       if ( ! param.mLabel.isEmpty() )
       {
@@ -2709,6 +2750,8 @@ namespace QgsWms
       }
       else if ( mLayerGroups.contains( nickname ) )
       {
+        // Reverse order of layers from a group
+        QList<QgsMapLayer *> layersFromGroup;
         for ( QgsMapLayer *layer : mLayerGroups[nickname] )
         {
           if ( !mRestrictedLayers.contains( layerNickname( *layer ) ) )
@@ -2721,9 +2764,10 @@ namespace QgsWms
                 throw QgsMapServiceException( QStringLiteral( "StyleNotDefined" ), QStringLiteral( "Style \"%1\" does not exist for layer \"%2\"" ).arg( style, layerNickname( *layer ) ) );
               }
             }
-            layers.insert( 0, layer );
+            layersFromGroup.push_front( layer );
           }
         }
+        layers.append( layersFromGroup );
       }
       else
       {

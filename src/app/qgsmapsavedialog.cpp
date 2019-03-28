@@ -15,8 +15,18 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "qgsmapsavedialog.h"
 
+#include <QClipboard>
+#include <QCheckBox>
+#include <QFileDialog>
+#include <QImage>
+#include <QList>
+#include <QPainter>
+#include <QPrinter>
+#include <QSpinBox>
+
+#include "qgsmapsavedialog.h"
+#include "qgsguiutils.h"
 #include "qgis.h"
 #include "qgisapp.h"
 #include "qgsscalecalculator.h"
@@ -28,15 +38,9 @@
 #include "qgsmaprenderertask.h"
 #include "qgsproject.h"
 #include "qgssettings.h"
+#include "qgsmapcanvas.h"
+#include "qgsmessagebar.h"
 
-#include <QClipboard>
-#include <QCheckBox>
-#include <QFileDialog>
-#include <QImage>
-#include <QList>
-#include <QPainter>
-#include <QPrinter>
-#include <QSpinBox>
 
 Q_GUI_EXPORT extern int qt_defaultDpiX();
 
@@ -77,9 +81,9 @@ QgsMapSaveDialog::QgsMapSaveDialog( QWidget *parent, QgsMapCanvas *mapCanvas, co
   }
   mDrawDecorations->setText( tr( "Draw active decorations: %1" ).arg( !activeDecorations.isEmpty() ? activeDecorations : tr( "none" ) ) );
 
-  connect( mResolutionSpinBox, static_cast < void ( QSpinBox::* )( int ) > ( &QSpinBox::valueChanged ), this, &QgsMapSaveDialog::updateDpi );
-  connect( mOutputWidthSpinBox, static_cast < void ( QSpinBox::* )( int ) > ( &QSpinBox::valueChanged ), this, &QgsMapSaveDialog::updateOutputWidth );
-  connect( mOutputHeightSpinBox, static_cast < void ( QSpinBox::* )( int ) > ( &QSpinBox::valueChanged ), this, &QgsMapSaveDialog::updateOutputHeight );
+  connect( mResolutionSpinBox, &QSpinBox::editingFinished, this, [ = ] { updateDpi( mResolutionSpinBox->value() ); } );
+  connect( mOutputWidthSpinBox, &QSpinBox::editingFinished, this, [ = ] { updateOutputWidth( mOutputWidthSpinBox->value() );} );
+  connect( mOutputHeightSpinBox, &QSpinBox::editingFinished, this, [ = ] { updateOutputHeight( mOutputHeightSpinBox->value() );} );
   connect( mExtentGroupBox, &QgsExtentGroupBox::extentChanged, this, &QgsMapSaveDialog::updateExtent );
   connect( mScaleWidget, &QgsScaleWidget::scaleChanged, this, &QgsMapSaveDialog::updateScale );
   connect( mLockAspectRatio, &QgsRatioLockButton::lockChanged, this, &QgsMapSaveDialog::lockChanged );
@@ -225,7 +229,7 @@ void QgsMapSaveDialog::updateScale( double scale )
   calculator.setMapUnits( mExtentGroupBox->currentCrs().mapUnits() );
   calculator.setDpi( mDpi );
 
-  double oldScale = 1 / ( calculator.calculate( mExtent, mSize.width() ) );
+  double oldScale = calculator.calculate( mExtent, mSize.width() );
   double scaleRatio = scale / oldScale;
   mExtent.scale( scaleRatio );
   mExtentGroupBox->setOutputExtentFromUser( mExtent, mExtentGroupBox->currentCrs() );
@@ -287,13 +291,14 @@ void QgsMapSaveDialog::applyMapSettings( QgsMapSettings &mapSettings )
   mapSettings.setFlag( QgsMapSettings::ForceVectorOutput, true ); // force vector output (no caching of marker images etc.)
   mapSettings.setFlag( QgsMapSettings::DrawEditingInfo, false );
   mapSettings.setFlag( QgsMapSettings::DrawSelection, true );
-
+  mapSettings.setSelectionColor( mMapCanvas->mapSettings().selectionColor() );
   mapSettings.setDestinationCrs( mMapCanvas->mapSettings().destinationCrs() );
   mapSettings.setExtent( extent() );
   mapSettings.setOutputSize( size() );
   mapSettings.setOutputDpi( dpi() );
   mapSettings.setBackgroundColor( mMapCanvas->canvasColor() );
   mapSettings.setRotation( mMapCanvas->rotation() );
+  mapSettings.setEllipsoid( QgsProject::instance()->ellipsoid() );
   mapSettings.setLayers( mMapCanvas->layers() );
   mapSettings.setLabelingEngineSettings( mMapCanvas->mapSettings().labelingEngineSettings() );
   mapSettings.setTransformContext( QgsProject::instance()->transformContext() );

@@ -14,8 +14,6 @@
  *                                                                         *
  ***************************************************************************/
 
-#define SIP_NO_FILE
-
 #ifndef QGS_FEATUREPOOL_H
 #define QGS_FEATUREPOOL_H
 
@@ -27,14 +25,16 @@
 #include "qgsfeature.h"
 #include "qgsspatialindex.h"
 #include "qgsfeaturesink.h"
-
-class QgsVectorLayer;
+#include "qgsvectorlayerfeatureiterator.h"
 
 /**
  * \ingroup analysis
  * A feature pool is based on a vector layer and caches features.
+ *
+ * \note This class is a technology preview and unstable API.
+ * \since QGIS 3.4
  */
-class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink
+class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink SIP_ABSTRACT
 {
 
   public:
@@ -42,11 +42,23 @@ class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink
     virtual ~QgsFeaturePool() = default;
 
     /**
-     * Retrieve the feature with the specified \a id into \a feature.
-     * It will be retrieved from the cache or from the underlying layer if unavailable.
-     * If the feature is neither available from the cache nor from the layer it will return false.
+     * Retrieves the feature with the specified \a id into \a feature.
+     * It will be retrieved from the cache or from the underlying feature source if unavailable.
+     * If the feature is neither available from the cache nor from the source it will return FALSE.
      */
     bool getFeature( QgsFeatureId id, QgsFeature &feature );
+
+    /**
+     * Get features for the provided \a request. No features will be fetched
+     * from the cache and the request is sent directly to the underlying feature source.
+     * Results of the request are cached in the pool and the ids of all the features
+     * are returned. This is used to warm the cache for a particular area of interest
+     * (bounding box) or other set of features.
+     * This will get a new feature source from the source vector layer.
+     * This needs to be called from the main thread.
+     * If \a feedback is specified, the call may return if the feedback is canceled.
+     */
+    QgsFeatureIds getFeatures( const QgsFeatureRequest &request, QgsFeedback *feedback = nullptr ) SIP_SKIP;
 
     /**
      * Updates a feature in this pool.
@@ -63,14 +75,18 @@ class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink
     /**
      * Returns the complete set of feature ids in this pool.
      * Note that this concerns the features governed by this pool, which are not necessarily all cached.
+     *
+     * \note not available in Python bindings
      */
-    QgsFeatureIds allFeatureIds() const;
+    QgsFeatureIds allFeatureIds() const SIP_SKIP;
 
     /**
      * Get all feature ids in the bounding box \a rect. It will use a spatial index to
      * determine the ids.
+     *
+     * \note not available in Python bindings
      */
-    QgsFeatureIds getIntersects( const QgsRectangle &rect ) const;
+    QgsFeatureIds getIntersects( const QgsRectangle &rect ) const SIP_SKIP;
 
     /**
      * Get a pointer to the underlying layer.
@@ -85,8 +101,10 @@ class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink
      * will need to be done on the main thread and
      * the pointer will need to be checked for validity
      * before usage.
+     *
+     * \note not available in Python bindings
      */
-    QPointer<QgsVectorLayer> layerPtr() const;
+    QPointer<QgsVectorLayer> layerPtr() const SIP_SKIP;
 
     /**
      * The layer id of the layer.
@@ -103,13 +121,21 @@ class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink
      */
     QgsCoordinateReferenceSystem crs() const;
 
+    /**
+     * Returns the name of the layer.
+     *
+     * Should be preferred over layer().name() because it can directly be run on
+     * the background thread.
+     */
+    QString layerName() const;
+
   protected:
 
     /**
      * Inserts a feature into the cache and the spatial index.
      * To be used by implementations of ``addFeature``.
      */
-    void insertFeature( const QgsFeature &feature );
+    void insertFeature( const QgsFeature &feature, bool skipLock = false );
 
     /**
      * Changes a feature in the cache and the spatial index.
@@ -127,19 +153,34 @@ class ANALYSIS_EXPORT QgsFeaturePool : public QgsFeatureSink
      * Set all the feature ids governed by this feature pool.
      * Should be called by subclasses constructor and whenever
      * they insert a new feature.
+     *
+     * \note not available in Python bindings
      */
-    void setFeatureIds( const QgsFeatureIds &ids );
+    void setFeatureIds( const QgsFeatureIds &ids ) SIP_SKIP;
+
+    /**
+     * Checks if the feature \a fid is cached.
+     *
+     * \note not available in Python bindings
+     * \since QGIS 3.4
+     */
+    bool isFeatureCached( QgsFeatureId fid ) SIP_SKIP;
 
   private:
+#ifdef SIP_RUN
+    QgsFeaturePool( const QgsFeaturePool &other )
+    {}
+#endif
+
     static const int CACHE_SIZE = 1000;
     QCache<QgsFeatureId, QgsFeature> mFeatureCache;
     QPointer<QgsVectorLayer> mLayer;
     mutable QReadWriteLock mCacheLock;
     QgsFeatureIds mFeatureIds;
     QgsSpatialIndex mIndex;
-    QString mLayerId;
     QgsWkbTypes::GeometryType mGeometryType;
-    QgsCoordinateReferenceSystem mCrs;
+    std::unique_ptr<QgsVectorLayerFeatureSource> mFeatureSource;
+    QString mLayerName;
 };
 
 #endif // QGS_FEATUREPOOL_H

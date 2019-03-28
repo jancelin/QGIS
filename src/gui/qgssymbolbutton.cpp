@@ -24,6 +24,7 @@
 #include "qgscolorschemeregistry.h"
 #include "qgscolorswatchgrid.h"
 #include "qgssymbollayerutils.h"
+#include "qgsguiutils.h"
 #include <QMenu>
 #include <QClipboard>
 #include <QDrag>
@@ -45,7 +46,7 @@ QgsSymbolButton::QgsSymbolButton( QWidget *parent, const QString &dialogTitle )
 
   //make sure height of button looks good under different platforms
   QSize size = QToolButton::minimumSizeHint();
-  int fontHeight = Qgis::UI_SCALE_FACTOR * fontMetrics().height() * 1.4;
+  int fontHeight = static_cast< int >( Qgis::UI_SCALE_FACTOR * fontMetrics().height() * 1.4 );
   mSizeHint = QSize( size.width(), std::max( size.height(), fontHeight ) );
 }
 
@@ -320,7 +321,8 @@ void QgsSymbolButton::prepareMenu()
   std::unique_ptr< QgsSymbol > tempSymbol( QgsSymbolLayerUtils::symbolFromMimeData( QApplication::clipboard()->mimeData() ) );
   if ( tempSymbol && tempSymbol->type() == mType )
   {
-    pasteSymbolAction->setIcon( QgsSymbolLayerUtils::symbolPreviewIcon( tempSymbol.get(), QSize( 16, 16 ), 1 ) );
+    const int iconSize = QgsGuiUtils::scaleIconSize( 16 );
+    pasteSymbolAction->setIcon( QgsSymbolLayerUtils::symbolPreviewIcon( tempSymbol.get(), QSize( iconSize, iconSize ), 1 ) );
   }
   else
   {
@@ -470,6 +472,17 @@ void QgsSymbolButton::updatePreview( const QColor &color, QgsSymbol *tempSymbol 
   QIcon icon = QgsSymbolLayerUtils::symbolPreviewIcon( previewSymbol.get(), currentIconSize );
   setIconSize( currentIconSize );
   setIcon( icon );
+
+  // set tooltip
+  // create very large preview image
+  int width = static_cast< int >( Qgis::UI_SCALE_FACTOR * fontMetrics().width( 'X' ) * 23 );
+  int height = static_cast< int >( width / 1.61803398875 ); // golden ratio
+
+  QPixmap pm = QgsSymbolLayerUtils::symbolPreviewPixmap( previewSymbol.get(), QSize( width, height ), height / 20 );
+  QByteArray data;
+  QBuffer buffer( &data );
+  pm.save( &buffer, "PNG", 100 );
+  setToolTip( QStringLiteral( "<img src='data:image/png;base64, %3'>" ).arg( QString( data.toBase64() ) ) );
 }
 
 bool QgsSymbolButton::colorFromMimeData( const QMimeData *mimeData, QColor &resultColor, bool &hasAlpha )
@@ -490,7 +503,8 @@ bool QgsSymbolButton::colorFromMimeData( const QMimeData *mimeData, QColor &resu
 QPixmap QgsSymbolButton::createColorIcon( const QColor &color ) const
 {
   //create an icon pixmap
-  QPixmap pixmap( 16, 16 );
+  const int iconSize = QgsGuiUtils::scaleIconSize( 16 );
+  QPixmap pixmap( iconSize, iconSize );
   pixmap.fill( Qt::transparent );
 
   QPainter p;
@@ -501,7 +515,7 @@ QPixmap QgsSymbolButton::createColorIcon( const QColor &color ) const
 
   //draw border
   p.setPen( QColor( 197, 197, 197 ) );
-  p.drawRect( 0, 0, 15, 15 );
+  p.drawRect( 0, 0, iconSize - 1, iconSize - 1 );
   p.end();
   return pixmap;
 }

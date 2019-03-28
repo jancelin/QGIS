@@ -171,6 +171,11 @@ QgsSymbolLayer *QgsSimpleLineSymbolLayer::create( const QgsStringMap &props )
     l->setDrawInsidePolygon( props[QStringLiteral( "draw_inside_polygon" )].toInt() );
   }
 
+  if ( props.contains( QStringLiteral( "ring_filter" ) ) )
+  {
+    l->setRingFilter( static_cast< RenderRingFilter>( props[QStringLiteral( "ring_filter" )].toInt() ) );
+  }
+
   l->restoreOldDataDefinedProperties( props );
 
   return l;
@@ -240,34 +245,58 @@ void QgsSimpleLineSymbolLayer::renderPolygonStroke( const QPolygonF &points, QLi
   }
 
   if ( mDrawInsidePolygon )
-  {
-    //only drawing the line on the interior of the polygon, so set clip path for painter
     p->save();
-    QPainterPath clipPath;
-    clipPath.addPolygon( points );
 
-    if ( rings )
+  switch ( mRingFilter )
+  {
+    case AllRings:
+    case ExteriorRingOnly:
     {
-      //add polygon rings
-      QList<QPolygonF>::const_iterator it = rings->constBegin();
-      for ( ; it != rings->constEnd(); ++it )
+      if ( mDrawInsidePolygon )
       {
-        QPolygonF ring = *it;
-        clipPath.addPolygon( ring );
-      }
-    }
+        //only drawing the line on the interior of the polygon, so set clip path for painter
+        QPainterPath clipPath;
+        clipPath.addPolygon( points );
 
-    //use intersect mode, as a clip path may already exist (e.g., for composer maps)
-    p->setClipPath( clipPath, Qt::IntersectClip );
+        if ( rings )
+        {
+          //add polygon rings
+          QList<QPolygonF>::const_iterator it = rings->constBegin();
+          for ( ; it != rings->constEnd(); ++it )
+          {
+            QPolygonF ring = *it;
+            clipPath.addPolygon( ring );
+          }
+        }
+
+        //use intersect mode, as a clip path may already exist (e.g., for composer maps)
+        p->setClipPath( clipPath, Qt::IntersectClip );
+      }
+
+      renderPolyline( points, context );
+    }
+    break;
+
+    case InteriorRingsOnly:
+      break;
   }
 
-  renderPolyline( points, context );
   if ( rings )
   {
-    mOffset = -mOffset; // invert the offset for rings!
-    Q_FOREACH ( const QPolygonF &ring, *rings )
-      renderPolyline( ring, context );
-    mOffset = -mOffset;
+    switch ( mRingFilter )
+    {
+      case AllRings:
+      case InteriorRingsOnly:
+      {
+        mOffset = -mOffset; // invert the offset for rings!
+        for ( const QPolygonF &ring : qgis::as_const( *rings ) )
+          renderPolyline( ring, context );
+        mOffset = -mOffset;
+      }
+      break;
+      case ExteriorRingOnly:
+        break;
+    }
   }
 
   if ( mDrawInsidePolygon )
@@ -355,6 +384,7 @@ QgsStringMap QgsSimpleLineSymbolLayer::properties() const
   map[QStringLiteral( "customdash_unit" )] = QgsUnitTypes::encodeUnit( mCustomDashPatternUnit );
   map[QStringLiteral( "customdash_map_unit_scale" )] = QgsSymbolLayerUtils::encodeMapUnitScale( mCustomDashPatternMapUnitScale );
   map[QStringLiteral( "draw_inside_polygon" )] = ( mDrawInsidePolygon ? QStringLiteral( "1" ) : QStringLiteral( "0" ) );
+  map[QStringLiteral( "ring_filter" )] = QString::number( static_cast< int >( mRingFilter ) );
   return map;
 }
 
@@ -373,6 +403,7 @@ QgsSimpleLineSymbolLayer *QgsSimpleLineSymbolLayer::clone() const
   l->setUseCustomDashPattern( mUseCustomDashPattern );
   l->setCustomDashVector( mCustomDashVector );
   l->setDrawInsidePolygon( mDrawInsidePolygon );
+  l->setRingFilter( mRingFilter );
   copyDataDefinedProperties( l );
   copyPaintEffect( l );
   return l;
@@ -428,7 +459,7 @@ QString QgsSimpleLineSymbolLayer::ogrFeatureStyle( double mmScaleFactor, double 
 
 QgsSymbolLayer *QgsSimpleLineSymbolLayer::createFromSld( QDomElement &element )
 {
-  QgsDebugMsg( "Entered." );
+  QgsDebugMsg( QStringLiteral( "Entered." ) );
 
   QDomElement strokeElem = element.firstChildElement( QStringLiteral( "Stroke" ) );
   if ( strokeElem.isNull() )
@@ -781,6 +812,11 @@ QgsSymbolLayer *QgsMarkerLineSymbolLayer::create( const QgsStringMap &props )
       x->setPlacement( Interval );
   }
 
+  if ( props.contains( QStringLiteral( "ring_filter" ) ) )
+  {
+    x->setRingFilter( static_cast< RenderRingFilter>( props[QStringLiteral( "ring_filter" )].toInt() ) );
+  }
+
   x->restoreOldDataDefinedProperties( props );
 
   return x;
@@ -910,19 +946,39 @@ void QgsMarkerLineSymbolLayer::renderPolygonStroke( const QPolygonF &points, QLi
   {
     context.renderContext().setGeometry( curvePolygon->exteriorRing() );
   }
-  renderPolyline( points, context );
+
+  switch ( mRingFilter )
+  {
+    case AllRings:
+    case ExteriorRingOnly:
+      renderPolyline( points, context );
+      break;
+    case InteriorRingsOnly:
+      break;
+  }
+
   if ( rings )
   {
-    mOffset = -mOffset; // invert the offset for rings!
-    for ( int i = 0; i < rings->size(); ++i )
+    switch ( mRingFilter )
     {
-      if ( curvePolygon )
+      case AllRings:
+      case InteriorRingsOnly:
       {
-        context.renderContext().setGeometry( curvePolygon->interiorRing( i ) );
+        mOffset = -mOffset; // invert the offset for rings!
+        for ( int i = 0; i < rings->size(); ++i )
+        {
+          if ( curvePolygon )
+          {
+            context.renderContext().setGeometry( curvePolygon->interiorRing( i ) );
+          }
+          renderPolyline( rings->at( i ), context );
+        }
+        mOffset = -mOffset;
       }
-      renderPolyline( rings->at( i ), context );
+      break;
+      case ExteriorRingOnly:
+        break;
     }
-    mOffset = -mOffset;
   }
 }
 
@@ -957,7 +1013,7 @@ void QgsMarkerLineSymbolLayer::renderPolylineInterval( const QPolygonF &points, 
   }
 
   double painterUnitInterval = rc.convertToPainterUnits( interval, mIntervalUnit, mIntervalMapUnitScale );
-  lengthLeft = painterUnitInterval - rc.convertToPainterUnits( offsetAlongLine, mIntervalUnit, mIntervalMapUnitScale );
+  lengthLeft = painterUnitInterval - rc.convertToPainterUnits( offsetAlongLine, mOffsetAlongLineUnit, mOffsetAlongLineMapUnitScale );
 
   int pointNum = 0;
   for ( int i = 1; i < points.count(); ++i )
@@ -1057,7 +1113,8 @@ void QgsMarkerLineSymbolLayer::renderPolylineVertex( const QPolygonF &points, Qg
            || ( placement == CurvePoint && vId.type == QgsVertexId::CurveVertex ) )
       {
         //transform
-        x = vPoint.x(), y = vPoint.y();
+        x = vPoint.x();
+        y = vPoint.y();
         z = 0.0;
         if ( ct.isValid() )
         {
@@ -1346,6 +1403,8 @@ QgsStringMap QgsMarkerLineSymbolLayer::properties() const
     map[QStringLiteral( "placement" )] = QStringLiteral( "curvepoint" );
   else
     map[QStringLiteral( "placement" )] = QStringLiteral( "interval" );
+
+  map[QStringLiteral( "ring_filter" )] = QString::number( static_cast< int >( mRingFilter ) );
   return map;
 }
 
@@ -1380,6 +1439,7 @@ QgsMarkerLineSymbolLayer *QgsMarkerLineSymbolLayer::clone() const
   x->setOffsetAlongLine( mOffsetAlongLine );
   x->setOffsetAlongLineMapUnitScale( mOffsetAlongLineMapUnitScale );
   x->setOffsetAlongLineUnit( mOffsetAlongLineUnit );
+  x->setRingFilter( mRingFilter );
   copyDataDefinedProperties( x );
   copyPaintEffect( x );
   return x;
@@ -1464,7 +1524,7 @@ void QgsMarkerLineSymbolLayer::toSld( QDomDocument &doc, QDomElement &element, c
 
 QgsSymbolLayer *QgsMarkerLineSymbolLayer::createFromSld( QDomElement &element )
 {
-  QgsDebugMsg( "Entered." );
+  QgsDebugMsg( QStringLiteral( "Entered." ) );
 
   QDomElement strokeElem = element.firstChildElement( QStringLiteral( "Stroke" ) );
   if ( strokeElem.isNull() )
@@ -1559,6 +1619,11 @@ double QgsMarkerLineSymbolLayer::width() const
   return mMarker->size();
 }
 
+double QgsMarkerLineSymbolLayer::width( const QgsRenderContext &context ) const
+{
+  return mMarker->size( context );
+}
+
 void QgsMarkerLineSymbolLayer::setOutputUnit( QgsUnitTypes::RenderUnit unit )
 {
   QgsLineSymbolLayer::setOutputUnit( unit );
@@ -1605,9 +1670,18 @@ QSet<QString> QgsMarkerLineSymbolLayer::usedAttributes( const QgsRenderContext &
   return attr;
 }
 
+bool QgsMarkerLineSymbolLayer::hasDataDefinedProperties() const
+{
+  if ( QgsSymbolLayer::hasDataDefinedProperties() )
+    return true;
+  if ( mMarker && mMarker->hasDataDefinedProperties() )
+    return true;
+  return false;
+}
+
 double QgsMarkerLineSymbolLayer::estimateMaxBleed( const QgsRenderContext &context ) const
 {
-  return context.convertToPainterUnits( ( mMarker->size() / 2.0 ), mMarker->sizeUnit(), mMarker->sizeMapUnitScale() ) +
+  return ( mMarker->size( context ) / 2.0 ) +
          context.convertToPainterUnits( std::fabs( mOffset ), mOffsetUnit, mOffsetMapUnitScale );
 }
 

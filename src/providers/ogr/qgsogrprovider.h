@@ -129,6 +129,7 @@ class QgsOgrProvider : public QgsVectorDataProvider
     bool enterUpdateMode() override { return _enterUpdateMode(); }
     bool leaveUpdateMode() override;
     bool isSaveAndLoadStyleToDatabaseSupported() const override;
+    bool isDeleteStyleFromDatabaseSupported() const override;
     QString fileVectorFilters() const override;
     //! Returns a string containing the available database drivers
     QString databaseDrivers() const;
@@ -406,15 +407,17 @@ class QgsOgrProviderUtils
     //! Inject credentials into the dsName (if any)
     static QString expandAuthConfig( const QString &dsName );
 
-    static void setRelevantFields( OGRLayerH ogrLayer, int fieldCount, bool fetchGeometry, const QgsAttributeList &fetchAttributes, bool firstAttrIsFid );
+    static void setRelevantFields( OGRLayerH ogrLayer, int fieldCount,
+                                   bool fetchGeometry,
+                                   const QgsAttributeList &fetchAttributes,
+                                   bool firstAttrIsFid,
+                                   const QString &subsetString );
 
     /**
      * Sets a subset string for an OGR \a layer.
-     *
-     * If \a addOriginalFid is specified, then the original OGR feature ID field will be added. If this is successful,
-     * \a origFidAdded will be set to true.
+     * Might return either layer, or a new OGR SQL result layer
      */
-    static OGRLayerH setSubsetString( OGRLayerH layer, GDALDatasetH ds, QTextCodec *encoding, const QString &subsetString, bool addOriginalFid = false, bool *origFidAdded = nullptr );
+    static OGRLayerH setSubsetString( OGRLayerH layer, GDALDatasetH ds, QTextCodec *encoding, const QString &subsetString );
     static QByteArray quotedIdentifier( QByteArray field, const QString &driverName );
 
     /**
@@ -509,7 +512,7 @@ class QgsOgrDataset
 
     bool executeSQLNoReturn( const QString &sql );
 
-    OGRLayerH createSQLResultLayer( QTextCodec *encoding, const QString &layerName, int layerIndex );
+    OGRLayerH getLayerFromNameOrIndex( const QString &layerName, int layerIndex );
 
     void releaseResultSet( OGRLayerH hSqlLayer );
 };

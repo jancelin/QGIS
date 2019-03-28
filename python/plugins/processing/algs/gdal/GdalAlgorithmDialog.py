@@ -55,8 +55,8 @@ from processing.tools.dataobjects import createContext
 
 class GdalAlgorithmDialog(AlgorithmDialog):
 
-    def __init__(self, alg):
-        super().__init__(alg)
+    def __init__(self, alg, parent=None):
+        super().__init__(alg, parent=parent)
         self.mainWidget().parametersHaveChanged()
 
     def getParametersPanel(self, alg, parent):
@@ -142,3 +142,5 @@ class GdalParametersPanel(ParametersPanel):
             self.text.setPlainText(" ".join(commands))
         except AlgorithmDialogBase.InvalidParameterValue as e:
             self.text.setPlainText(self.tr("Invalid value for parameter '{0}'").format(e.parameter.description()))
+        except AlgorithmDialogBase.InvalidOutputExtension as e:
+            self.text.setPlainText(e.message)

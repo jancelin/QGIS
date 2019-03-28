@@ -78,8 +78,19 @@ bool QgsGeometryCollection::operator==( const QgsAbstractGeometry &other ) const
 
   for ( int i = 0; i < mGeometries.count(); ++i )
   {
-    if ( mGeometries.at( i ) != otherCollection->mGeometries.at( i ) )
-      return false;
+    QgsAbstractGeometry *g1 = mGeometries.at( i );
+    QgsAbstractGeometry *g2 = otherCollection->mGeometries.at( i );
+
+    // Quick check if the geometries are exactly the same
+    if ( g1 != g2 )
+    {
+      if ( !g1 || !g2 )
+        return false;
+
+      // Slower check, compare the contents of the geometries
+      if ( *g1 != *g2 )
+        return false;
+    }
   }
 
   return true;
@@ -621,7 +632,7 @@ bool QgsGeometryCollection::fromCollectionWkt( const QString &wkt, const QVector
   }
   mWkbType = parts.first;
 
-  QString defChildWkbType = QStringLiteral( "%1%2%3 " ).arg( defaultChildWkbType, is3D() ? "Z" : "", isMeasure() ? "M" : "" );
+  QString defChildWkbType = QStringLiteral( "%1%2%3 " ).arg( defaultChildWkbType, is3D() ? QStringLiteral( "Z" ) : QString(), isMeasure() ? QStringLiteral( "M" ) : QString() );
 
   const QStringList blocks = QgsGeometryUtils::wktGetChildBlocks( parts.second, defChildWkbType );
   for ( const QString &childWkt : blocks )

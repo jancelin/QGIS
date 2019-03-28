@@ -1621,7 +1621,7 @@
   </action>
   <action name="mActionLayerProperties">
    <property name="text">
-    <string>&amp;Properties...</string>
+    <string>Layer &amp;Properties…</string>
    </property>
    <property name="toolTip">
     <string>Layer Properties</string>
@@ -2455,6 +2455,9 @@ Acts on currently active editable layer</string>
    </property>
    <property name="toolTip">
     <string>Paste features in clipboard into a new temporary scratch layer.</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Alt+V</string>
    </property>
   </action>
   <action name="mActionDxfExport">

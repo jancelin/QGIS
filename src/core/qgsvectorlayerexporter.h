@@ -75,7 +75,7 @@ class CORE_EXPORT QgsVectorLayerExporter : public QgsFeatureSink
      * \param onlySelected set to true to export only selected features
      * \param errorMessage if non-null, will be set to any error messages
      * \param options optional provider dataset options
-     * \param feedback optional feedback object to show progress and cancelation of export
+     * \param feedback optional feedback object to show progress and cancellation of export
      * \returns NoError for a successful export, or encountered error
      */
     static ExportError exportLayer( QgsVectorLayer *layer,
@@ -98,6 +98,7 @@ class CORE_EXPORT QgsVectorLayerExporter : public QgsFeatureSink
      * not available
      * \param overwrite set to true to overwrite any existing data source
      * \param options optional provider dataset options
+     * \param sinkFlags for how to add features
      */
     QgsVectorLayerExporter( const QString &uri,
                             const QString &provider,
@@ -105,7 +106,8 @@ class CORE_EXPORT QgsVectorLayerExporter : public QgsFeatureSink
                             QgsWkbTypes::Type geometryType,
                             const QgsCoordinateReferenceSystem &crs,
                             bool overwrite = false,
-                            const QMap<QString, QVariant> &options = QMap<QString, QVariant>() );
+                            const QMap<QString, QVariant> &options = QMap<QString, QVariant>(),
+                            QgsFeatureSink::SinkFlags sinkFlags = nullptr );
 
     //! QgsVectorLayerExporter cannot be copied
     QgsVectorLayerExporter( const QgsVectorLayerExporter &rh ) = delete;

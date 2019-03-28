@@ -23,6 +23,7 @@
 #include "qgsmapcanvas.h"
 #include "qgsapplication.h"
 #include "qgslogger.h"
+#include "qgsguiutils.h"
 #include <QLayout>
 #include <QCompleter>
 #include <QMenu>
@@ -42,7 +43,7 @@ QgsLocatorWidget::QgsLocatorWidget( QWidget *parent )
 #endif
 
   int placeholderMinWidth = mLineEdit->fontMetrics().width( mLineEdit->placeholderText() );
-  int minWidth = std::max( 200, ( int )( placeholderMinWidth * 1.6 ) );
+  int minWidth = std::max( 200, static_cast< int >( placeholderMinWidth * 1.8 ) );
   resize( minWidth, 30 );
   QSizePolicy sizePolicy( QSizePolicy::MinimumExpanding, QSizePolicy::Preferred );
   sizePolicy.setHorizontalStretch( 0 );
@@ -75,7 +76,9 @@ QgsLocatorWidget::QgsLocatorWidget( QWidget *parent )
   mProxyModel->setSourceModel( mLocatorModel );
   mResultsView->setModel( mProxyModel );
   mResultsView->setUniformRowHeights( true );
-  mResultsView->setIconSize( QSize( 16, 16 ) );
+
+  int iconSize = QgsGuiUtils::scaleIconSize( 16 );
+  mResultsView->setIconSize( QSize( iconSize, iconSize ) );
   mResultsView->recalculateSize();
 
   connect( mLocator, &QgsLocator::foundResult, this, &QgsLocatorWidget::addResult );

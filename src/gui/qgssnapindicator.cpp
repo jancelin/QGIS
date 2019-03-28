@@ -15,6 +15,7 @@
 
 #include "qgssnapindicator.h"
 
+#include "qgsguiutils.h"
 #include "qgsmapcanvas.h"
 #include "qgssettings.h"
 #include "qgsvectorlayer.h"
@@ -30,7 +31,6 @@ QgsSnapIndicator::QgsSnapIndicator( QgsMapCanvas *canvas )
 
 QgsSnapIndicator::~QgsSnapIndicator() = default;
 
-
 void QgsSnapIndicator::setMatch( const QgsPointLocator::Match &match )
 {
   mMatch = match;
@@ -45,7 +45,8 @@ void QgsSnapIndicator::setMatch( const QgsPointLocator::Match &match )
     if ( !mSnappingMarker )
     {
       mSnappingMarker.reset( new QgsVertexMarker( mCanvas ) );
-      mSnappingMarker->setPenWidth( 3 );
+      mSnappingMarker->setIconSize( QgsGuiUtils::scaleIconSize( 10 ) );
+      mSnappingMarker->setPenWidth( QgsGuiUtils::scaleIconSize( 3 ) );
     }
 
     QgsSettings s;
@@ -65,6 +66,7 @@ void QgsSnapIndicator::setMatch( const QgsPointLocator::Match &match )
     {
       iconType = QgsVertexMarker::ICON_DOUBLE_TRIANGLE;
     }
+
     mSnappingMarker->setIconType( iconType );
 
     mSnappingMarker->setCenter( match.point() );
@@ -83,10 +85,14 @@ void QgsSnapIndicator::setMatch( const QgsPointLocator::Match &match )
 
 void QgsSnapIndicator::setVisible( bool visible )
 {
-  mSnappingMarker->setVisible( visible );
+  if ( mSnappingMarker )
+    mSnappingMarker->setVisible( visible );
 }
 
 bool QgsSnapIndicator::isVisible() const
 {
-  return mSnappingMarker->isVisible();
+  if ( mSnappingMarker )
+    return mSnappingMarker->isVisible();
+
+  return false;
 }

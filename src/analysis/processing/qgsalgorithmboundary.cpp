@@ -63,13 +63,9 @@ QList<int> QgsBoundaryAlgorithm::inputLayerTypes() const
   return QList<int>() << QgsProcessing::TypeVectorLine << QgsProcessing::TypeVectorPolygon;
 }
 
-bool QgsBoundaryAlgorithm::supportInPlaceEdit( const QgsMapLayer *l ) const
+bool QgsBoundaryAlgorithm::supportInPlaceEdit( const QgsMapLayer * ) const
 {
-  const QgsVectorLayer *layer = qobject_cast< const QgsVectorLayer * >( l );
-  if ( !layer )
-    return false;
-
-  return layer->isSpatial();
+  return false;
 }
 
 QgsBoundaryAlgorithm *QgsBoundaryAlgorithm::createInstance() const
@@ -113,7 +109,7 @@ QgsFeatureList QgsBoundaryAlgorithm::processFeature( const QgsFeature &feature, 
   {
     QgsGeometry inputGeometry = feature.geometry();
     QgsGeometry outputGeometry = QgsGeometry( inputGeometry.constGet()->boundary() );
-    if ( !outputGeometry )
+    if ( outputGeometry.isNull() )
     {
       feedback->reportError( QObject::tr( "No boundary for feature %1 (possibly a closed linestring?)'" ).arg( feature.id() ) );
       outFeature.clearGeometry();

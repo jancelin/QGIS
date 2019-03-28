@@ -324,7 +324,7 @@ class ModelerParametersDialog(QDialog):
                         value = value.staticValue()
                     wrapper.setValue(value)
 
-            for name, out in list(alg.modelOutputs().items()):
+            for name, out in alg.modelOutputs().items():
                 if out.childOutputName() in self.valueItems:
                     self.valueItems[out.childOutputName()].setText(out.name())
 
@@ -351,7 +351,9 @@ class ModelerParametersDialog(QDialog):
                 continue
             try:
                 wrapper = self.wrappers[param.name()]
-                if issubclass(wrapper.__class__, QgsProcessingModelerParameterWidget):
+                if issubclass(wrapper.__class__, WidgetWrapper):
+                    val = wrapper.value()
+                elif issubclass(wrapper.__class__, QgsProcessingModelerParameterWidget):
                     val = wrapper.value()
                 else:
                     val = wrapper.parameterValue()

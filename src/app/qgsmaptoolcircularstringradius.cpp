@@ -22,8 +22,10 @@
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
 #include "qgsstatusbar.h"
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
+
 #include <QDoubleSpinBox>
-#include <QMouseEvent>
 #include <cmath>
 
 QgsMapToolCircularStringRadius::QgsMapToolCircularStringRadius( QgsMapToolCapture *parentTool, QgsMapCanvas *canvas, CaptureMode mode )
@@ -95,6 +97,9 @@ void QgsMapToolCircularStringRadius::cadCanvasReleaseEvent( QgsMapMouseEvent *e 
 
 void QgsMapToolCircularStringRadius::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   if ( !mPoints.isEmpty() )
   {
     recalculateTempRubberBand( e->mapPoint() );

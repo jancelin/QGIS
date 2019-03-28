@@ -28,9 +28,10 @@
 #include "qgssettings.h"
 #include "qgsproject.h"
 #include "qgssnapindicator.h"
+#include "qgsmapmouseevent.h"
 
 #include <QMessageBox>
-#include <QMouseEvent>
+
 
 QgsMeasureTool::QgsMeasureTool( QgsMapCanvas *canvas, bool measureArea )
   : QgsMapTool( canvas )
@@ -67,6 +68,8 @@ QVector<QgsPointXY> QgsMeasureTool::points() const
 void QgsMeasureTool::activate()
 {
   mDialog->show();
+  mRubberBand->show();
+  mRubberBandPoints->show();
   QgsMapTool::activate();
 
   // ensure that we have correct settings
@@ -97,6 +100,8 @@ void QgsMeasureTool::deactivate()
   mSnapIndicator->setMatch( QgsPointLocator::Match() );
 
   mDialog->hide();
+  mRubberBand->hide();
+  mRubberBandPoints->hide();
   QgsMapTool::deactivate();
 }
 

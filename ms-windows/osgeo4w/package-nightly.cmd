@@ -48,10 +48,9 @@ if not exist "%SETUPAPI_LIBRARY%" set SETUPAPI_LIBRARY=%PF86%\Windows Kits\8.0\L
 if not exist "%SETUPAPI_LIBRARY%" (echo SETUPAPI_LIBRARY not found & goto error)
 
 set CMAKE_OPT=^
-	-D SIP_BINARY_PATH=%O4W_ROOT%/apps/Python36/sip.exe ^
 	-D CMAKE_CXX_FLAGS_RELWITHDEBINFO="/MD /ZI /MP /Od /D NDEBUG" ^
 	-D CMAKE_PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO=%BUILDDIR%\apps\%PACKAGENAME%\pdb ^
-	-D SPATIALINDEX_LIBRARY=%O4W_ROOT%/lib/spatialindex_i.lib
+	-D SPATIALINDEX_LIBRARY=%O4W_ROOT%/lib/spatialindex-32.lib
 goto cmake
 
 :cmake_x86_64
@@ -62,7 +61,6 @@ if not exist "%SETUPAPI_LIBRARY%" (echo SETUPAPI_LIBRARY not found & goto error)
 
 set CMAKE_OPT=^
 	-D SPATIALINDEX_LIBRARY=%O4W_ROOT%/lib/spatialindex-64.lib ^
-	-D SIP_BINARY_PATH=%O4W_ROOT%/apps/Python36/sip.exe ^
 	-D CMAKE_CXX_FLAGS_RELWITHDEBINFO="/MD /Zi /MP /Od /D NDEBUG" ^
 	-D CMAKE_PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO=%BUILDDIR%\apps\%PACKAGENAME%\pdb ^
 	-D SETUPAPI_LIBRARY="%SETUPAPI_LIBRARY%" ^
@@ -70,7 +68,6 @@ set CMAKE_OPT=^
 
 :cmake
 for %%i in ("%GRASS_PREFIX%") do set GRASS7_VERSION=%%~nxi
-set GRASS7_VERSION=%GRASS7_VERSION:grass-=%
 set GRASS_VERSIONS=%GRASS7_VERSION%
 
 set TAR=tar.exe
@@ -131,6 +128,8 @@ if errorlevel 1 goto error
 
 if "%CMAKEGEN%"=="" set CMAKEGEN=Ninja
 
+for %%i in (%PYTHONHOME%) do set PYVER=%%~ni
+
 cmake -G "%CMAKEGEN%" ^
 	-D CMAKE_CXX_COMPILER="%CMAKE_COMPILER_PATH:\=/%/cl.exe" ^
 	-D CMAKE_C_COMPILER="%CMAKE_COMPILER_PATH:\=/%/cl.exe" ^
@@ -154,8 +153,9 @@ cmake -G "%CMAKEGEN%" ^
 	-D SQLITE3_LIBRARY=%O4W_ROOT%/lib/sqlite3_i.lib ^
 	-D SPATIALITE_LIBRARY=%O4W_ROOT%/lib/spatialite_i.lib ^
 	-D PYTHON_EXECUTABLE=%O4W_ROOT%/bin/python3.exe ^
-	-D PYTHON_INCLUDE_PATH=%O4W_ROOT%/apps/Python36/include ^
-	-D PYTHON_LIBRARY=%O4W_ROOT%/apps/Python36/libs/python36.lib ^
+	-D SIP_BINARY_PATH=%PYTHONHOME:\=/%/sip.exe ^
+	-D PYTHON_INCLUDE_PATH=%PYTHONHOME:\=/%/include ^
+	-D PYTHON_LIBRARY=%PYTHONHOME:\=/%/libs/%PYVER%.lib ^
 	-D QT_LIBRARY_DIR=%O4W_ROOT%/lib ^
 	-D QT_HEADERS_DIR=%O4W_ROOT%/apps/qt5/include ^
 	-D CMAKE_INSTALL_PREFIX=%O4W_ROOT%/apps/%PACKAGENAME% ^
@@ -205,8 +205,8 @@ if exist "%TEMP%" rmdir /s /q "%TEMP%"
 mkdir "%TEMP%"
 
 for %%g IN (%GRASS_VERSIONS%) do (
-	set path=!path!;%OSGEO4W_ROOT%\apps\grass\grass-%%g\lib
-	set GISBASE=%OSGEO4W_ROOT%\apps\grass\grass-%%g
+	set path=!path!;%OSGEO4W_ROOT%\apps\grass\%%g\lib
+	set GISBASE=%OSGEO4W_ROOT%\apps\grass\%%g
 )
 PATH %path%;%BUILDDIR%\output\plugins
 set QT_PLUGIN_PATH=%BUILDDIR%\output\plugins;%OSGEO4W_ROOT%\apps\qt5\plugins
@@ -249,9 +249,12 @@ if errorlevel 1 (echo creation of registry template & goto error)
 
 set batches=
 for %%g IN (%GRASS_VERSIONS%) do (
-	sed -e 's/@package@/%PACKAGENAME%/g' -e 's/@version@/%VERSION%/g' -e 's/@grassversion@/%%g/g' qgis-grass.bat.tmpl >%OSGEO4W_ROOT%\bin\%PACKAGENAME%-g%%g.bat.tmpl
+	for /f "usebackq tokens=1" %%a in (`%%g --config version`) do set gv=%%a
+	for /F "delims=." %%i in ("!gv!") do set v=%%i
+
+	sed -e 's/@package@/%PACKAGENAME%/g' -e 's/@version@/%VERSION%/g' -e 's/@grasspath@/%%g/g' -e 's/@grassversion@/!gv!/g' qgis-grass.bat.tmpl >%OSGEO4W_ROOT%\bin\%PACKAGENAME%-g!v!.bat.tmpl
 	if errorlevel 1 (echo creation of desktop template failed & goto error)
-	set batches=!batches! bin/%PACKAGENAME%-g%%g.bat.tmpl
+	set batches=!batches! bin/%PACKAGENAME%-g!v!.bat.tmpl
 )
 
 sed -e 's/@package@/%PACKAGENAME%/g' -e 's/@version@/%VERSION%/g' python.bat.tmpl >%OSGEO4W_ROOT%\bin\python-%PACKAGENAME%.bat.tmpl
@@ -277,7 +280,7 @@ move %OSGEO4W_ROOT%\apps\qt5\plugins\designer\qgis_customwidgets.dll %PKGDIR%\qt
 if errorlevel 1 (echo move of customwidgets failed & goto error)
 
 if not exist %PKGDIR%\python\PyQt5\uic\widget-plugins mkdir %PKGDIR%\python\PyQt5\uic\widget-plugins
-move %OSGEO4W_ROOT%\apps\Python36\Lib\site-packages\PyQt5\uic\widget-plugins\qgis_customwidgets.py %PKGDIR%\python\PyQt5\uic\widget-plugins
+move %PYTHONHOME%\Lib\site-packages\PyQt5\uic\widget-plugins\qgis_customwidgets.py %PKGDIR%\python\PyQt5\uic\widget-plugins
 if errorlevel 1 (echo move of customwidgets binding failed & goto error)
 
 if not exist %ARCH%\release\qgis\%PACKAGENAME% mkdir %ARCH%\release\qgis\%PACKAGENAME%

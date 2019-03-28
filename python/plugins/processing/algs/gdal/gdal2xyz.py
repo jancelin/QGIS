@@ -26,7 +26,6 @@ __copyright__ = '(C) 2013, Alexander Bruy'
 __revision__ = '$Format:%H$'
 
 from qgis.core import (QgsProcessingAlgorithm,
-                       QgsProcessing,
                        QgsProcessingException,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterBand,
@@ -53,6 +52,7 @@ class gdal2xyz(GdalAlgorithm):
                                                             self.tr('Input layer')))
         self.addParameter(QgsProcessingParameterBand(self.BAND,
                                                      self.tr('Band number'),
+                                                     1,
                                                      parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterBoolean(self.CSV,
                                                         self.tr('Output comma-separated values'),
@@ -94,11 +94,11 @@ class gdal2xyz(GdalAlgorithm):
         arguments.append(raster.source())
         arguments.append(self.parameterAsFileOutput(parameters, self.OUTPUT, context))
 
-        commands = []
         if isWindows():
-            commands = ['cmd.exe', '/C ', self.commandName() + '.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
+            commands = ["python3", "-m", self.commandName()]
         else:
-            commands = [self.commandName() + '.py', GdalUtils.escapeAndJoin(arguments)]
+            commands = [self.commandName() + '.py']
+
+        commands.append(GdalUtils.escapeAndJoin(arguments))
 
         return commands

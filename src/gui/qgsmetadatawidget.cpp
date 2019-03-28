@@ -295,6 +295,8 @@ void QgsMetadataWidget::addConstraint()
 void QgsMetadataWidget::removeSelectedConstraint()
 {
   const QModelIndexList selectedRows = tabConstraints->selectionModel()->selectedRows();
+  if ( selectedRows.empty() )
+    return;
   mConstraintsModel->removeRow( selectedRows[0].row() );
 }
 
@@ -394,6 +396,9 @@ void QgsMetadataWidget::addLink()
 void QgsMetadataWidget::removeSelectedLink()
 {
   const QModelIndexList selectedRows = tabLinks->selectionModel()->selectedRows();
+  if ( selectedRows.empty() )
+    return;
+
   mLinksModel->removeRow( selectedRows[0].row() );
 }
 
@@ -822,7 +827,7 @@ QMap<QString, QString> QgsMetadataWidget::parseLanguages()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return countries;
   }
 
@@ -840,7 +845,7 @@ QMap<QString, QString> QgsMetadataWidget::parseLanguages()
   QFile secondFile( path );
   if ( !secondFile.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return countries;
   }
 
@@ -865,7 +870,7 @@ QStringList QgsMetadataWidget::parseLicenses()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return wordList;
   }
 
@@ -889,7 +894,7 @@ QStringList QgsMetadataWidget::parseLinkTypes()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return wordList;
   }
 
@@ -913,7 +918,7 @@ QStringList QgsMetadataWidget::parseMimeTypes()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return wordList;
   }
 
@@ -934,7 +939,7 @@ QMap<QString, QString> QgsMetadataWidget::parseTypes()
   QFile file( path );
   if ( !file.open( QIODevice::ReadOnly ) )
   {
-    QgsDebugMsg( QString( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
+    QgsDebugMsg( QStringLiteral( "Error while opening the CSV file: %1, %2 " ).arg( path, file.errorString() ) );
     return types;
   }
 

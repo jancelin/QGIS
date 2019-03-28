@@ -32,7 +32,6 @@
 class QgsProcessingProvider;
 class QgsProcessingFeedback;
 class QgsFeatureSink;
-class QgsProcessingFeedback;
 class QgsProcessingModelAlgorithm;
 class QgsProcessingAlgorithmConfigurationWidget;
 
@@ -75,6 +74,7 @@ class CORE_EXPORT QgsProcessingAlgorithm
       FlagNoThreading = 1 << 6, //!< Algorithm is not thread safe and cannot be run in a background thread, e.g. for algorithms which manipulate the current project, layer selections, or with external dependencies which are not thread-safe.
       FlagDisplayNameIsLiteral = 1 << 7, //!< Algorithm's display name is a static literal string, and should not be translated or automatically formatted. For use with algorithms named after commands, e.g. GRASS 'v.in.ogr'.
       FlagSupportsInPlaceEdits = 1 << 8, //!< Algorithm supports in-place editing
+      FlagKnownIssues = 1 << 9, //!< Algorithm has known issues
       FlagDeprecated = FlagHideFromToolbox | FlagHideFromModeler, //!< Algorithm is deprecated
     };
     Q_DECLARE_FLAGS( Flags, Flag )
@@ -122,9 +122,12 @@ class CORE_EXPORT QgsProcessingAlgorithm
      * algorithms in a model, allowing them to adjust their behavior at run time
      * according to some user configuration.
      *
+     * Raises a QgsProcessingException if a new algorithm instance could not be created,
+     * e.g. if there is an issue with the subclass' createInstance() method.
+     *
      * \see initAlgorithm()
      */
-    QgsProcessingAlgorithm *create( const QVariantMap &configuration = QVariantMap() ) const SIP_TRANSFERBACK;
+    QgsProcessingAlgorithm *create( const QVariantMap &configuration = QVariantMap() ) const SIP_THROW( QgsProcessingException ) SIP_TRANSFERBACK;
 
     /**
      * Returns the algorithm name, used for identifying the algorithm. This string
@@ -409,7 +412,7 @@ class CORE_EXPORT QgsProcessingAlgorithm
      *
      * This method should return a 'pristine' instance of the algorithm class.
      */
-    virtual QgsProcessingAlgorithm *createInstance() const = 0 SIP_FACTORY;
+    virtual QgsProcessingAlgorithm *createInstance() const = 0 SIP_FACTORY SIP_VIRTUALERRORHANDLER( processing_exception_handler );
 
     /**
      * Initializes the algorithm using the specified \a configuration.
@@ -620,7 +623,7 @@ class CORE_EXPORT QgsProcessingAlgorithm
      * This function creates a new object and the caller takes responsibility for deleting the returned object.
      */
     QgsFeatureSink *parameterAsSink( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context, QString &destinationIdentifier SIP_OUT,
-                                     const QgsFields &fields, QgsWkbTypes::Type geometryType = QgsWkbTypes::NoGeometry, const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem() ) const SIP_FACTORY;
+                                     const QgsFields &fields, QgsWkbTypes::Type geometryType = QgsWkbTypes::NoGeometry, const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem(), QgsFeatureSink::SinkFlags sinkFlags = nullptr ) const SIP_FACTORY;
 
     /**
      * Evaluates the parameter with matching \a name to a feature source.
@@ -891,7 +894,7 @@ class CORE_EXPORT QgsProcessingFeatureBasedAlgorithm : public QgsProcessingAlgor
      * input feature results in multiple output features.
      *
      * The provided \a feedback object can be used to push messages to the log and for giving feedback
-     * to users. Note that handling of progress reports and algorithm cancelation is handled by
+     * to users. Note that handling of progress reports and algorithm cancellation is handled by
      * the base class and subclasses do not need to reimplement this logic.
      *
      * Algorithms can throw a QgsProcessingException if a fatal error occurred which should
@@ -929,6 +932,13 @@ class CORE_EXPORT QgsProcessingFeatureBasedAlgorithm : public QgsProcessingAlgor
      * Returns the processing feature source flags to be used in the algorithm.
      */
     virtual QgsProcessingFeatureSource::Flag sourceFlags() const;
+
+    /**
+     * Returns the feature sink flags to be used for the output.
+     *
+     * \since QGIS 3.4.1
+     */
+    virtual QgsFeatureSink::SinkFlags sinkFlags() const;
 
     /**
      * Maps the input WKB geometry type (\a inputWkbType) to the corresponding

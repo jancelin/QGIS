@@ -58,9 +58,8 @@ class ProcessingConfig:
     POST_EXECUTION_SCRIPT = 'POST_EXECUTION_SCRIPT'
     SHOW_CRS_DEF = 'SHOW_CRS_DEF'
     WARN_UNMATCHING_CRS = 'WARN_UNMATCHING_CRS'
-    DEFAULT_OUTPUT_RASTER_LAYER_EXT = 'DEFAULT_OUTPUT_RASTER_LAYER_EXT'
-    DEFAULT_OUTPUT_VECTOR_LAYER_EXT = 'DEFAULT_OUTPUT_VECTOR_LAYER_EXT'
     SHOW_PROVIDERS_TOOLTIP = 'SHOW_PROVIDERS_TOOLTIP'
+    SHOW_ALGORITHMS_KNOWN_ISSUES = 'SHOW_ALGORITHMS_KNOWN_ISSUES'
 
     settings = {}
     settingIcons = {}
@@ -94,6 +93,10 @@ class ProcessingConfig:
             ProcessingConfig.tr('General'),
             ProcessingConfig.WARN_UNMATCHING_CRS,
             ProcessingConfig.tr("Warn before executing if parameter CRS's do not match"), True))
+        ProcessingConfig.addSetting(Setting(
+            ProcessingConfig.tr('General'),
+            ProcessingConfig.SHOW_ALGORITHMS_KNOWN_ISSUES,
+            ProcessingConfig.tr("Show algorithms with known issues"), False))
         ProcessingConfig.addSetting(Setting(
             ProcessingConfig.tr('General'),
             ProcessingConfig.RASTER_STYLE,
@@ -135,24 +138,6 @@ class ProcessingConfig:
             invalidFeaturesOptions[2],
             valuetype=Setting.SELECTION,
             options=invalidFeaturesOptions))
-
-        extensions = QgsVectorFileWriter.supportedFormatExtensions()
-        ProcessingConfig.addSetting(Setting(
-            ProcessingConfig.tr('General'),
-            ProcessingConfig.DEFAULT_OUTPUT_VECTOR_LAYER_EXT,
-            ProcessingConfig.tr('Default output vector layer extension'),
-            extensions[0],
-            valuetype=Setting.SELECTION,
-            options=extensions))
-
-        extensions = QgsRasterFileWriter.supportedFormatExtensions()
-        ProcessingConfig.addSetting(Setting(
-            ProcessingConfig.tr('General'),
-            ProcessingConfig.DEFAULT_OUTPUT_RASTER_LAYER_EXT,
-            ProcessingConfig.tr('Default output raster layer extension'),
-            extensions[0],
-            valuetype=Setting.SELECTION,
-            options=extensions))
 
     @staticmethod
     def setGroupIcon(group, icon):
@@ -293,7 +278,9 @@ class Setting:
         self.validator(value)
         self.value = value
 
-    def read(self, qsettings=QgsSettings()):
+    def read(self, qsettings=None):
+        if not qsettings:
+            qsettings = QgsSettings()
         value = qsettings.value(self.qname, None)
         if value is not None:
             if isinstance(self.value, bool):
@@ -307,7 +294,9 @@ class Setting:
             else:
                 self.value = value
 
-    def save(self, qsettings=QgsSettings()):
+    def save(self, qsettings=None):
+        if not qsettings:
+            qsettings = QgsSettings()
         if self.valuetype == self.SELECTION:
             qsettings.setValue(self.qname, self.options.index(self.value))
         else:

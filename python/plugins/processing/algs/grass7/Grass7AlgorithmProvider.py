@@ -44,6 +44,10 @@ pluginPath = os.path.normpath(os.path.join(
 
 class Grass7AlgorithmProvider(QgsProcessingProvider):
 
+    # Subclasses of `Grass7AlgorithmProvider` should override `descriptionFolder`
+    # and set its value to their own description folder.
+    descriptionFolder = Grass7Utils.grassDescriptionPath()
+
     def __init__(self):
         super().__init__()
         self.algs = []
@@ -52,7 +56,7 @@ class Grass7AlgorithmProvider(QgsProcessingProvider):
         ProcessingConfig.settingIcons[self.name()] = self.icon()
         ProcessingConfig.addSetting(Setting(self.name(), 'ACTIVATE_GRASS7',
                                             self.tr('Activate'), True))
-        if isWindows() or isMac():
+        if isMac():
             ProcessingConfig.addSetting(Setting(
                 self.name(),
                 Grass7Utils.GRASS_FOLDER, self.tr('GRASS7 folder'),
@@ -84,7 +88,7 @@ class Grass7AlgorithmProvider(QgsProcessingProvider):
 
     def unload(self):
         ProcessingConfig.removeSetting('ACTIVATE_GRASS7')
-        if isWindows() or isMac():
+        if isMac():
             ProcessingConfig.removeSetting(Grass7Utils.GRASS_FOLDER)
         ProcessingConfig.removeSetting(Grass7Utils.GRASS_LOG_COMMANDS)
         ProcessingConfig.removeSetting(Grass7Utils.GRASS_LOG_CONSOLE)
@@ -99,7 +103,7 @@ class Grass7AlgorithmProvider(QgsProcessingProvider):
 
     def createAlgsList(self):
         algs = []
-        folder = Grass7Utils.grassDescriptionPath()
+        folder = self.descriptionFolder
         for descriptionFile in os.listdir(folder):
             if descriptionFile.endswith('txt'):
                 try:
@@ -137,6 +141,15 @@ class Grass7AlgorithmProvider(QgsProcessingProvider):
     def svgIconPath(self):
         return QgsApplication.iconPath("/providerGrass.svg")
 
+    def defaultVectorFileExtension(self, hasGeometry=True):
+        # By default,'gpkg', but if OGR has not been compiled with sqlite3, then
+        # we take "SHP"
+        if 'GPKG' in [o.driverName for o in
+                      QgsVectorFileWriter.ogrDriverList()]:
+            return 'gpkg'
+        else:
+            return 'shp' if hasGeometry else 'dbf'
+
     def supportsNonFileBasedOutput(self):
         """
         GRASS7 Provider doesn't support non file based outputs
@@ -154,7 +167,7 @@ class Grass7AlgorithmProvider(QgsProcessingProvider):
         return Grass7Utils.getSupportedOutputRasterExtensions()
 
     def canBeActivated(self):
-        return not bool(Grass7Utils.checkGrass7IsInstalled())
+        return not bool(Grass7Utils.checkGrassIsInstalled())
 
     def tr(self, string, context=''):
         if context == '':

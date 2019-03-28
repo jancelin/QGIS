@@ -259,7 +259,7 @@ bool QgsPostgresFeatureIterator::fetchFeature( QgsFeature &feature )
 #endif
 
     QString fetch = QStringLiteral( "FETCH FORWARD %1 FROM %2" ).arg( mFeatureQueueSize ).arg( mCursorName );
-    QgsDebugMsgLevel( QString( "fetching %1 features." ).arg( mFeatureQueueSize ), 4 );
+    QgsDebugMsgLevel( QStringLiteral( "fetching %1 features." ).arg( mFeatureQueueSize ), 4 );
 
     lock();
     if ( mConn->PQsendQuery( fetch ) == 0 ) // fetch features asynchronously
@@ -308,7 +308,7 @@ bool QgsPostgresFeatureIterator::fetchFeature( QgsFeature &feature )
 
   if ( mFeatureQueue.empty() )
   {
-    QgsDebugMsg( QString( "Finished after %1 features" ).arg( mFetched ) );
+    QgsDebugMsg( QStringLiteral( "Finished after %1 features" ).arg( mFetched ) );
     close();
 
     mSource->mShared->ensureFeaturesCountedAtLeast( mFetched );
@@ -349,7 +349,7 @@ bool QgsPostgresFeatureIterator::prepareSimplification( const QgsSimplifyMethod 
     }
     else
     {
-      QgsDebugMsg( QString( "Simplification method type (%1) is not recognised by PostgresFeatureIterator" ).arg( methodType ) );
+      QgsDebugMsg( QStringLiteral( "Simplification method type (%1) is not recognised by PostgresFeatureIterator" ).arg( methodType ) );
     }
   }
   return QgsAbstractFeatureIterator::prepareSimplification( simplifyMethod );
@@ -386,9 +386,7 @@ bool QgsPostgresFeatureIterator::rewind()
 
   // move cursor to first record
 
-  lock();
   mConn->PQexecNR( QStringLiteral( "move absolute 0 in %1" ).arg( mCursorName ) );
-  unlock();
   mFeatureQueue.clear();
   mFetched = 0;
   mLastFetch = false;
@@ -401,9 +399,7 @@ bool QgsPostgresFeatureIterator::close()
   if ( !mConn )
     return false;
 
-  lock();
   mConn->closeCursor( mCursorName );
-  unlock();
 
   if ( !mIsTransactionConnection )
   {
@@ -627,7 +623,7 @@ bool QgsPostgresFeatureIterator::declareCursor( const QString &whereClause, long
       break;
 
     case PktUnknown:
-      QgsDebugMsg( "Cannot declare cursor without primary key." );
+      QgsDebugMsg( QStringLiteral( "Cannot declare cursor without primary key." ) );
       return false;
   }
 
@@ -651,17 +647,14 @@ bool QgsPostgresFeatureIterator::declareCursor( const QString &whereClause, long
   if ( !orderBy.isEmpty() )
     query += QStringLiteral( " ORDER BY %1 " ).arg( orderBy );
 
-  lock();
   if ( !mConn->openCursor( mCursorName, query ) )
   {
-    unlock();
     // reloading the fields might help next time around
     // TODO how to cleanly force reload of fields?  P->loadFields();
     if ( closeOnFail )
       close();
     return false;
   }
-  unlock();
 
   mLastFetch = false;
   return true;
@@ -791,7 +784,7 @@ bool QgsPostgresFeatureIterator::getFeature( QgsPostgresResult &queryResult, int
   }
 
   feature.setId( fid );
-  QgsDebugMsgLevel( QString( "fid=%1" ).arg( fid ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "fid=%1" ).arg( fid ), 4 );
 
   // iterate attributes
   if ( subsetOfAttributes )

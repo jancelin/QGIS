@@ -111,6 +111,7 @@ QVariantMap QgsJoinWithLinesAlgorithm::processAlgorithm( const QVariantMap &para
   if ( hubFieldsToCopy.empty() )
   {
     hubOutFields = hubSource->fields();
+    hubFieldIndices.reserve( hubOutFields.count() );
     for ( int i = 0; i < hubOutFields.count(); ++i )
     {
       hubFieldIndices << i;
@@ -118,6 +119,7 @@ QVariantMap QgsJoinWithLinesAlgorithm::processAlgorithm( const QVariantMap &para
   }
   else
   {
+    hubFieldIndices.reserve( hubOutFields.count() );
     for ( const QString &field : hubFieldsToCopy )
     {
       int index = hubSource->fields().lookupField( field );
@@ -177,7 +179,7 @@ QVariantMap QgsJoinWithLinesAlgorithm::processAlgorithm( const QVariantMap &para
 
   QString dest;
   std::unique_ptr< QgsFeatureSink > sink( parameterAsSink( parameters, QStringLiteral( "OUTPUT" ), context, dest, fields,
-                                          outType, hubSource->sourceCrs() ) );
+                                          outType, hubSource->sourceCrs(), QgsFeatureSink::RegeneratePrimaryKey ) );
   if ( !sink )
     throw QgsProcessingException( invalidSinkError( parameters, QStringLiteral( "OUTPUT" ) ) );
 

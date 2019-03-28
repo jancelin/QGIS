@@ -75,6 +75,7 @@ QgsLayerStylingWidget::QgsLayerStylingWidget( QgsMapCanvas *canvas, const QList<
   mAutoApplyTimer->setSingleShot( true );
 
   mUndoWidget = new QgsUndoWidget( this, mMapCanvas );
+  mUndoWidget->setButtonsVisible( false );
   mUndoWidget->setAutoDelete( false );
   mUndoWidget->setObjectName( QStringLiteral( "Undo Styles" ) );
   mUndoWidget->hide();
@@ -133,7 +134,7 @@ void QgsLayerStylingWidget::setLayer( QgsMapLayer *layer )
     disconnect( mCurrentLayer, &QgsMapLayer::styleChanged, this, &QgsLayerStylingWidget::updateCurrentWidgetLayer );
   }
 
-  if ( !layer || !layer->isSpatial() )
+  if ( !layer || !layer->isSpatial() || !QgsProject::instance()->layerIsEmbedded( layer->id() ).isEmpty() )
   {
     mLayerCombo->setLayer( nullptr );
     mStackedWidget->setCurrentIndex( mNotSupportedPage );

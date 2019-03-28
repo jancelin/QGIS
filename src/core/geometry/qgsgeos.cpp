@@ -91,7 +91,7 @@ static void printGEOSNotice( const char *fmt, ... )
   vsnprintf( buffer, sizeof buffer, fmt, ap );
   va_end( ap );
 
-  QgsDebugMsg( QString( "GEOS notice: %1" ).arg( QString::fromUtf8( buffer ) ) );
+  QgsDebugMsg( QStringLiteral( "GEOS notice: %1" ).arg( QString::fromUtf8( buffer ) ) );
 #else
   Q_UNUSED( fmt );
 #endif
@@ -157,7 +157,7 @@ QgsGeometry QgsGeos::geometryFromGeos( GEOSGeometry *geos )
   return g;
 }
 
-QgsGeometry QgsGeos::geometryFromGeos( geos::unique_ptr geos )
+QgsGeometry QgsGeos::geometryFromGeos( const geos::unique_ptr &geos )
 {
   QgsGeometry g( QgsGeos::fromGeos( geos.get() ) );
   return g;
@@ -393,7 +393,7 @@ QgsAbstractGeometry *QgsGeos::combine( const QVector<QgsGeometry> &geomList, QSt
   geosGeometries.reserve( geomList.size() );
   for ( const QgsGeometry &g : geomList )
   {
-    if ( !g )
+    if ( g.isNull() )
       continue;
 
     geosGeometries << asGeos( g.constGet(), mPrecision ).release();
@@ -910,7 +910,7 @@ QgsGeometryEngine::EngineOperationResult QgsGeos::splitPolygonGeometry( GEOSGeom
     intersectGeometry.reset( GEOSIntersection_r( geosinit.ctxt, mGeos.get(), polygon ) );
     if ( !intersectGeometry )
     {
-      QgsDebugMsg( "intersectGeometry is nullptr" );
+      QgsDebugMsg( QStringLiteral( "intersectGeometry is nullptr" ) );
       continue;
     }
 
@@ -1187,7 +1187,9 @@ std::unique_ptr<QgsPolygon> QgsGeos::fromGeosPolygon( const GEOSGeometry *geos )
   }
 
   QVector<QgsCurve *> interiorRings;
-  for ( int i = 0; i < GEOSGetNumInteriorRings_r( geosinit.ctxt, geos ); ++i )
+  const int ringCount = GEOSGetNumInteriorRings_r( geosinit.ctxt, geos );
+  interiorRings.reserve( ringCount );
+  for ( int i = 0; i < ringCount; ++i )
   {
     ring = GEOSGetInteriorRingN_r( geosinit.ctxt, geos, i );
     if ( ring )
@@ -1656,7 +1658,7 @@ QgsAbstractGeometry *QgsGeos::convexHull( QString *errorMsg ) const
   CATCH_GEOS_WITH_ERRMSG( nullptr );
 }
 
-bool QgsGeos::isValid( QString *errorMsg ) const
+bool QgsGeos::isValid( QString *errorMsg, const bool allowSelfTouchingHoles, QgsGeometry *errorLoc ) const
 {
   if ( !mGeos )
   {
@@ -1665,7 +1667,45 @@ bool QgsGeos::isValid( QString *errorMsg ) const
 
   try
   {
-    return GEOSisValid_r( geosinit.ctxt, mGeos.get() );
+    GEOSGeometry *g1 = nullptr;
+    char *r = nullptr;
+    char res = GEOSisValidDetail_r( geosinit.ctxt, mGeos.get(), allowSelfTouchingHoles ? GEOSVALID_ALLOW_SELFTOUCHING_RING_FORMING_HOLE : 0, &r, &g1 );
+    const bool invalid = res != 1;
+
+    if ( invalid && errorMsg )
+    {
+      static QgsStringMap translatedErrors;
+
+      if ( translatedErrors.empty() )
+      {
+        // Copied from https://git.osgeo.org/gitea/geos/geos/src/branch/master/src/operation/valid/TopologyValidationError.cpp
+        translatedErrors.insert( QStringLiteral( "topology validation error" ), QObject::tr( "Topology validation error", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "repeated point" ), QObject::tr( "Repeated point", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "hole lies outside shell" ), QObject::tr( "Hole lies outside shell", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "holes are nested" ), QObject::tr( "Holes are nested", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "interior is disconnected" ), QObject::tr( "Interior is disconnected", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "self-intersection" ), QObject::tr( "Self-intersection", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "ring self-intersection" ), QObject::tr( "Ring self-intersection", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "nested shells" ), QObject::tr( "Nested shells", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "duplicate rings" ), QObject::tr( "Duplicate rings", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "too few points in geometry component" ), QObject::tr( "Too few points in geometry component", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "invalid coordinate" ), QObject::tr( "Invalid coordinate", "GEOS Error" ) );
+        translatedErrors.insert( QStringLiteral( "ring is not closed" ), QObject::tr( "Ring is not closed", "GEOS Error" ) );
+      }
+
+      const QString error( r );
+      *errorMsg = translatedErrors.value( error.toLower(), error );
+
+      if ( g1 && errorLoc )
+      {
+        *errorLoc = geometryFromGeos( g1 );
+      }
+      else if ( g1 )
+      {
+        GEOSGeom_destroy_r( geosinit.ctxt, g1 );
+      }
+    }
+    return !invalid;
   }
   CATCH_GEOS_WITH_ERRMSG( false );
 }
@@ -2342,7 +2382,7 @@ static geos::unique_ptr _mergeLinestrings( const GEOSGeometry *line1, const GEOS
     return nullptr;
 
   bool intersectionAtOrigLineEndpoint =
-    ( intersectionPoint.x() == x1 && intersectionPoint.y() == y1 ) ||
+    ( intersectionPoint.x() == x1 && intersectionPoint.y() == y1 ) !=
     ( intersectionPoint.x() == x2 && intersectionPoint.y() == y2 );
   bool intersectionAtReshapeLineEndpoint =
     ( intersectionPoint.x() == rx1 && intersectionPoint.y() == ry1 ) ||

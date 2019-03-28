@@ -46,7 +46,8 @@ from qgis.PyQt.QtCore import (
     pyqtSignal,
     QDataStream,
     QIODevice,
-    QUrl)
+    QUrl,
+    QTimer)
 from qgis.PyQt.QtWidgets import (QGraphicsView,
                                  QTreeWidget,
                                  QMessageBox,
@@ -92,6 +93,7 @@ from processing.modeler.ModelerParametersDialog import ModelerParametersDialog
 from processing.modeler.ModelerUtils import ModelerUtils
 from processing.modeler.ModelerScene import ModelerScene
 from processing.modeler.ProjectProvider import PROJECT_PROVIDER_ID
+from processing.core.ProcessingConfig import ProcessingConfig
 from qgis.utils import iface
 
 
@@ -288,8 +290,6 @@ class ModelerDialog(BASE, WIDGET):
         self.tabifyDockWidget(self.inputsDock, self.algorithmsDock)
         self.inputsDock.raise_()
 
-        self.zoom = 1
-
         self.setWindowFlags(Qt.WindowMinimizeButtonHint |
                             Qt.WindowMaximizeButtonHint |
                             Qt.WindowCloseButtonHint)
@@ -304,6 +304,7 @@ class ModelerDialog(BASE, WIDGET):
         self.view.setScene(self.scene)
         self.view.setAcceptDrops(True)
         self.view.ensureVisible(0, 0, 10, 10)
+        self.view.scale(QgsApplication.desktop().logicalDpiX() / 96, QgsApplication.desktop().logicalDpiX() / 96)
 
         def _dragEnterEvent(event):
             if event.mimeData().hasText() or event.mimeData().hasFormat('application/x-vnd.qgis.qgis.algorithmid'):
@@ -312,19 +313,26 @@ class ModelerDialog(BASE, WIDGET):
                 event.ignore()
 
         def _dropEvent(event):
+            def alg_dropped(algorithm_id, pos):
+                alg = QgsApplication.processingRegistry().createAlgorithmById(algorithm_id)
+                if alg is not None:
+                    self._addAlgorithm(alg, pos)
+                else:
+                    assert False, algorithm_id
+
+            def input_dropped(id, pos):
+                if id in [param.id() for param in QgsApplication.instance().processingRegistry().parameterTypes()]:
+                    self.addInputOfType(itemId, pos)
+
             if event.mimeData().hasFormat('application/x-vnd.qgis.qgis.algorithmid'):
                 data = event.mimeData().data('application/x-vnd.qgis.qgis.algorithmid')
                 stream = QDataStream(data, QIODevice.ReadOnly)
                 algorithm_id = stream.readQString()
-                alg = QgsApplication.processingRegistry().createAlgorithmById(algorithm_id)
-                if alg is not None:
-                    self._addAlgorithm(alg, event.pos())
-                else:
-                    assert False, algorithm_id
+                QTimer.singleShot(0, lambda id=algorithm_id, pos=self.view.mapToScene(event.pos()): alg_dropped(id, pos))
+                event.accept()
             elif event.mimeData().hasText():
                 itemId = event.mimeData().text()
-                if itemId in [param.id() for param in QgsApplication.instance().processingRegistry().parameterTypes()]:
-                    self.addInputOfType(itemId, event.pos())
+                QTimer.singleShot(0, lambda id=itemId, pos=self.view.mapToScene(event.pos()): input_dropped(id, pos))
                 event.accept()
             else:
                 event.ignore()
@@ -402,7 +410,10 @@ class ModelerDialog(BASE, WIDGET):
         self.algorithmTree.setDragDropMode(QTreeWidget.DragOnly)
         self.algorithmTree.setDropIndicatorShown(True)
 
-        self.algorithmTree.setFilters(QgsProcessingToolboxProxyModel.FilterModeler)
+        filters = QgsProcessingToolboxProxyModel.Filters(QgsProcessingToolboxProxyModel.FilterModeler)
+        if ProcessingConfig.getSetting(ProcessingConfig.SHOW_ALGORITHMS_KNOWN_ISSUES):
+            filters |= QgsProcessingToolboxProxyModel.FilterShowKnownIssues
+        self.algorithmTree.setFilters(filters)
 
         if hasattr(self.searchBox, 'setPlaceholderText'):
             self.searchBox.setPlaceholderText(QCoreApplication.translate('ModelerDialog', 'Search…'))
@@ -487,7 +498,7 @@ class ModelerDialog(BASE, WIDGET):
             self.bar.pushMessage("", self.tr("Model doesn't contain any algorithm and/or parameter and can't be executed"), level=Qgis.Warning, duration=5)
             return
 
-        dlg = AlgorithmDialog(self.model)
+        dlg = AlgorithmDialog(self.model.create(), parent=iface.mainWindow())
         dlg.exec_()
 
     def save(self):
@@ -539,6 +550,7 @@ class ModelerDialog(BASE, WIDGET):
     def zoomActual(self):
         point = self.view.mapToScene(QPoint(self.view.viewport().width() / 2, self.view.viewport().height() / 2))
         self.view.resetTransform()
+        self.view.scale(QgsApplication.desktop().logicalDpiX() / 96, QgsApplication.desktop().logicalDpiX() / 96)
         self.view.centerOn(point)
 
     def zoomToItems(self):

@@ -66,7 +66,7 @@ Writes the contents of vector layer to a different datasource.
 :param onlySelected: set to true to export only selected features
 :param errorMessage: if non-null, will be set to any error messages
 :param options: optional provider dataset options
-:param feedback: optional feedback object to show progress and cancelation of export
+:param feedback: optional feedback object to show progress and cancellation of export
 
 :return: NoError for a successful export, or encountered error
 %End
@@ -77,7 +77,8 @@ Writes the contents of vector layer to a different datasource.
                             QgsWkbTypes::Type geometryType,
                             const QgsCoordinateReferenceSystem &crs,
                             bool overwrite = false,
-                            const QMap<QString, QVariant> &options = QMap<QString, QVariant>() );
+                            const QMap<QString, QVariant> &options = QMap<QString, QVariant>(),
+                            QgsFeatureSink::SinkFlags sinkFlags = 0 );
 %Docstring
 Constructor for QgsVectorLayerExporter.
 
@@ -89,6 +90,7 @@ Constructor for QgsVectorLayerExporter.
             not available
 :param overwrite: set to true to overwrite any existing data source
 :param options: optional provider dataset options
+:param sinkFlags: for how to add features
 %End
 
 

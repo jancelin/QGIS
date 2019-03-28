@@ -128,13 +128,14 @@ QSizeF QgsLayerTreeModelLegendNode::drawSymbolText( const QgsLegendSettings &set
 
 // -------------------------------------------------------------------------
 
-
 QgsSymbolLegendNode::QgsSymbolLegendNode( QgsLayerTreeLayer *nodeLayer, const QgsLegendSymbolItem &item, QObject *parent )
   : QgsLayerTreeModelLegendNode( nodeLayer, parent )
   , mItem( item )
   , mSymbolUsesMapUnits( false )
-  , mIconSize( 16, 16 )
 {
+  const int iconSize = QgsLayerTreeModel::scaleIconSize( 16 );
+  mIconSize = QSize( iconSize, iconSize );
+
   updateLabel();
   connect( qobject_cast<QgsVectorLayer *>( nodeLayer->layer() ), &QgsVectorLayer::symbolFeatureCountMapChanged, this, &QgsSymbolLegendNode::updateLabel );
   connect( nodeLayer, &QObject::destroyed, this, [ = ]() { mLayerNode = nullptr; } );
@@ -160,11 +161,13 @@ QSize QgsSymbolLegendNode::minimumIconSize() const
 
 QSize QgsSymbolLegendNode::minimumIconSize( QgsRenderContext *context ) const
 {
-  QSize minSz( 16, 16 );
+  const int iconSize = QgsLayerTreeModel::scaleIconSize( 16 );
+  const int largeIconSize = QgsLayerTreeModel::scaleIconSize( 512 );
+  QSize minSz( iconSize, iconSize );
   if ( mItem.symbol() && mItem.symbol()->type() == QgsSymbol::Marker )
   {
     minSz = QgsImageOperation::nonTransparentImageRect(
-              QgsSymbolLayerUtils::symbolPreviewPixmap( mItem.symbol(), QSize( 512, 512 ), 0,
+              QgsSymbolLayerUtils::symbolPreviewPixmap( mItem.symbol(), QSize( largeIconSize, largeIconSize ), 0,
                   context ).toImage(),
               minSz,
               true ).size();
@@ -172,7 +175,7 @@ QSize QgsSymbolLegendNode::minimumIconSize( QgsRenderContext *context ) const
   else if ( mItem.symbol() && mItem.symbol()->type() == QgsSymbol::Line )
   {
     minSz = QgsImageOperation::nonTransparentImageRect(
-              QgsSymbolLayerUtils::symbolPreviewPixmap( mItem.symbol(), QSize( minSz.width(), 512 ), 0,
+              QgsSymbolLayerUtils::symbolPreviewPixmap( mItem.symbol(), QSize( minSz.width(), largeIconSize ), 0,
                   context ).toImage(),
               minSz,
               true ).size();
@@ -387,7 +390,7 @@ QSizeF QgsSymbolLegendNode::drawSymbol( const QgsLegendSettings &settings, ItemC
   if ( QgsMarkerSymbol *markerSymbol = dynamic_cast<QgsMarkerSymbol *>( s ) )
   {
     // allow marker symbol to occupy bigger area if necessary
-    double size = context.convertToPainterUnits( markerSymbol->size(), markerSymbol->sizeUnit(), markerSymbol->sizeMapUnitScale() ) / context.scaleFactor();
+    double size = markerSymbol->size( context ) / context.scaleFactor();
     height = size;
     width = size;
     if ( width < settings.symbolSize().width() )
@@ -576,8 +579,8 @@ QVariant QgsRasterSymbolLegendNode::data( int role ) const
 {
   if ( role == Qt::DecorationRole )
   {
-    QSize iconSize( 16, 16 ); // TODO: configurable?
-    QPixmap pix( iconSize );
+    const int iconSize = QgsLayerTreeModel::scaleIconSize( 16 ); // TODO: configurable?
+    QPixmap pix( iconSize, iconSize );
     pix.fill( mColor );
     return QIcon( pix );
   }
@@ -658,7 +661,7 @@ QImage QgsWmsLegendNode::getLegendGraphic() const
 
 QVariant QgsWmsLegendNode::data( int role ) const
 {
-  //QgsDebugMsg( QString("XXX data called with role %1 -- mImage size is %2x%3").arg(role).arg(mImage.width()).arg(mImage.height()) );
+  //QgsDebugMsg( QStringLiteral("XXX data called with role %1 -- mImage size is %2x%3").arg(role).arg(mImage.width()).arg(mImage.height()) );
 
   if ( role == Qt::DecorationRole )
   {
@@ -718,7 +721,7 @@ void QgsWmsLegendNode::getLegendGraphicErrored( const QString &msg )
   if ( ! mFetcher ) return; // must be coming after finish
 
   mImage = renderMessage( msg );
-  //QgsDebugMsg( QString("XXX emitting dataChanged after writing an image of %1x%2").arg(mImage.width()).arg(mImage.height()) );
+  //QgsDebugMsg( QStringLiteral("XXX emitting dataChanged after writing an image of %1x%2").arg(mImage.width()).arg(mImage.height()) );
 
   emit dataChanged();
 
@@ -733,13 +736,13 @@ void QgsWmsLegendNode::getLegendGraphicFinished( const QImage &image )
 {
   if ( ! mFetcher ) return; // must be coming after error
 
-  //QgsDebugMsg( QString("XXX legend graphic finished, image is %1x%2").arg(theImage.width()).arg(theImage.height()) );
+  //QgsDebugMsg( QStringLiteral("XXX legend graphic finished, image is %1x%2").arg(theImage.width()).arg(theImage.height()) );
   if ( ! image.isNull() )
   {
     if ( image != mImage )
     {
       mImage = image;
-      //QgsDebugMsg( QString("XXX emitting dataChanged") );
+      //QgsDebugMsg( QStringLiteral("XXX emitting dataChanged") );
       emit dataChanged();
     }
     mValid = true; // only if not null I guess
@@ -749,7 +752,7 @@ void QgsWmsLegendNode::getLegendGraphicFinished( const QImage &image )
 
 void QgsWmsLegendNode::invalidateMapBasedData()
 {
-  //QgsDebugMsg( QString("XXX invalidateMapBasedData called") );
+  //QgsDebugMsg( QStringLiteral("XXX invalidateMapBasedData called") );
   // TODO: do this only if this extent != prev extent ?
   mValid = false;
   emit dataChanged();

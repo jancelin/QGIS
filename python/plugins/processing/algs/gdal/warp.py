@@ -38,6 +38,7 @@ from qgis.core import (QgsRasterFileWriter,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterBoolean,
                        QgsProcessingParameterExtent,
+                       QgsProcessingParameterString,
                        QgsProcessingParameterRasterDestination,
                        QgsProcessingUtils)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
@@ -59,6 +60,7 @@ class warp(GdalAlgorithm):
     TARGET_EXTENT = 'TARGET_EXTENT'
     TARGET_EXTENT_CRS = 'TARGET_EXTENT_CRS'
     MULTITHREADING = 'MULTITHREADING'
+    EXTRA = 'EXTRA'
     OUTPUT = 'OUTPUT'
 
     TYPES = ['Use input layer data type', 'Byte', 'Int16', 'UInt16', 'UInt32', 'Int32', 'Float32', 'Float64', 'CInt16', 'CInt32', 'CFloat32', 'CFloat64']
@@ -139,6 +141,13 @@ class warp(GdalAlgorithm):
         multithreading_param.setFlags(multithreading_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
         self.addParameter(multithreading_param)
 
+        extra_param = QgsProcessingParameterString(self.EXTRA,
+                                                   self.tr('Additional command-line parameters'),
+                                                   defaultValue=None,
+                                                   optional=True)
+        extra_param.setFlags(extra_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        self.addParameter(extra_param)
+
         self.addParameter(QgsProcessingParameterRasterDestination(self.OUTPUT,
                                                                   self.tr('Reprojected')))
 
@@ -171,6 +180,7 @@ class warp(GdalAlgorithm):
             raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
 
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         sourceCrs = self.parameterAsCrs(parameters, self.SOURCE_CRS, context)
         targetCrs = self.parameterAsCrs(parameters, self.TARGET_CRS, context)
         if self.NODATA in parameters and parameters[self.NODATA] is not None:
@@ -221,12 +231,17 @@ class warp(GdalAlgorithm):
             arguments.append('-ot ' + self.TYPES[data_type])
 
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         arguments.append('-of')
         arguments.append(QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]))
 
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         if options:
             arguments.extend(GdalUtils.parseCreationOptions(options))
+
+        if self.EXTRA in parameters and parameters[self.EXTRA] not in (None, ''):
+            extra = self.parameterAsString(parameters, self.EXTRA, context)
+            arguments.append(extra)
 
         arguments.append(inLayer.source())
         arguments.append(out)

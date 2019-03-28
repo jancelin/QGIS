@@ -35,10 +35,12 @@ from qgis.core import (QgsApplication,
                        QgsWkbTypes,
                        QgsMapLayer,
                        QgsFields)
+from processing.gui.MessageBarProgress import MessageBarProgress
 from processing.gui.MessageDialog import MessageDialog
 from processing.gui.AlgorithmDialog import AlgorithmDialog
 from processing.gui.AlgorithmExecutor import execute_in_place
 from qgis.utils import iface
+from processing.core.ProcessingConfig import ProcessingConfig
 
 
 class AlgorithmLocatorFilter(QgsLocatorFilter):
@@ -70,6 +72,9 @@ class AlgorithmLocatorFilter(QgsLocatorFilter):
         for a in QgsApplication.processingRegistry().algorithms():
             if a.flags() & QgsProcessingAlgorithm.FlagHideFromToolbox:
                 continue
+            if not ProcessingConfig.getSetting(ProcessingConfig.SHOW_ALGORITHMS_KNOWN_ISSUES) and \
+                    a.flags() & QgsProcessingAlgorithm.FlagKnownIssues:
+                continue
 
             if QgsLocatorFilter.stringMatches(a.displayName(), string) or [t for t in a.tags() if QgsLocatorFilter.stringMatches(t, string)] or \
                     (context.usingPrefix and not string):
@@ -94,9 +99,9 @@ class AlgorithmLocatorFilter(QgsLocatorFilter):
                 dlg.setMessage(message)
                 dlg.exec_()
                 return
-            dlg = alg.createCustomParametersWidget(None)
+            dlg = alg.createCustomParametersWidget(parent=iface.mainWindow())
             if not dlg:
-                dlg = AlgorithmDialog(alg)
+                dlg = AlgorithmDialog(alg, parent=iface.mainWindow())
             canvas = iface.mapCanvas()
             prevMapTool = canvas.mapTool()
             dlg.show()
@@ -136,7 +141,7 @@ class InPlaceAlgorithmLocatorFilter(QgsLocatorFilter):
         # collect results in main thread, since this method is inexpensive and
         # accessing the processing registry/current layer is not thread safe
 
-        if iface.activeLayer() is None or iface.activeLayer().type() != QgsMapLayer.VectorLayer or not iface.activeLayer().selectedFeatureCount():
+        if iface.activeLayer() is None or iface.activeLayer().type() != QgsMapLayer.VectorLayer:
             return
 
         for a in QgsApplication.processingRegistry().algorithms():
@@ -170,11 +175,11 @@ class InPlaceAlgorithmLocatorFilter(QgsLocatorFilter):
                 dlg.exec_()
                 return
 
-            if len(alg.parameterDefinitions()) > 2:
-                # hack!!
-                dlg = alg.createCustomParametersWidget(None)
+            if [d for d in alg.parameterDefinitions() if
+                    d.name() not in ('INPUT', 'OUTPUT')]:
+                dlg = alg.createCustomParametersWidget(parent=iface.mainWindow())
                 if not dlg:
-                    dlg = AlgorithmDialog(alg, True)
+                    dlg = AlgorithmDialog(alg, True, parent=iface.mainWindow())
                 canvas = iface.mapCanvas()
                 prevMapTool = canvas.mapTool()
                 dlg.show()
@@ -186,5 +191,6 @@ class InPlaceAlgorithmLocatorFilter(QgsLocatorFilter):
                         pass
                     canvas.setMapTool(prevMapTool)
             else:
+                feedback = MessageBarProgress(algname=alg.displayName())
                 parameters = {}
-                execute_in_place(alg, parameters)
+                execute_in_place(alg, parameters, feedback=feedback)

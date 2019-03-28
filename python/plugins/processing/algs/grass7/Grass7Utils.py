@@ -30,6 +30,7 @@ import shutil
 import shlex
 import subprocess
 import os
+import sys
 
 from qgis.core import (Qgis,
                        QgsApplication,
@@ -106,7 +107,7 @@ class Grass7Utils:
             si.wShowWindow = subprocess.SW_HIDE
         with subprocess.Popen(
                 [Grass7Utils.command, '-v'],
-                shell=True if isMac() else False,
+                shell=False,
                 stdout=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
@@ -132,9 +133,6 @@ class Grass7Utils:
         Find GRASS binary path on the operating system.
         Sets global variable Grass7Utils.command
         """
-        cmdList = ["grass74", "grass72", "grass71", "grass70", "grass",
-                   "grass74.sh", "grass72.sh", "grass71.sh", "grass70.sh", "grass.sh"]
-
         def searchFolder(folder):
             """
             Inline function to search for grass binaries into a folder
@@ -153,6 +151,24 @@ class Grass7Utils:
         path = Grass7Utils.grassPath()
         command = None
 
+        vn = os.path.join(path, "etc", "VERSIONNUMBER")
+        if os.path.isfile(vn):
+            with open(vn, "r") as f:
+                major, minor, patch = f.readlines()[0].split(' ')[0].split('.')
+                if patch != 'svn':
+                    patch = ''
+                cmdList = [
+                    "grass{}{}{}".format(major, minor, patch),
+                    "grass",
+                    "grass{}{}{}.sh".format(major, minor, patch),
+                    "grass.sh"
+                ]
+        else:
+            cmdList = [
+                "grass76", "grass74", "grass72", "grass70", "grass",
+                "grass76.sh", "grass74.sh", "grass72.sh", "grass70.sh", "grass.sh"
+            ]
+
         # For MS-Windows there is a difference between GRASS Path and GRASS binary
         if isWindows():
             # If nothing found, use OSGEO4W or QgsPrefix:
@@ -166,7 +182,7 @@ class Grass7Utils:
             # Search in grassPath
             command = searchFolder(path)
 
-        # Under GNU/Linux or if everything has failed, use shutil
+        # If everything has failed, use shutil
         if not command:
             for cmd in cmdList:
                 testBin = shutil.which(cmd)
@@ -193,27 +209,28 @@ class Grass7Utils:
         if not isWindows() and not isMac():
             return ''
 
-        folder = ProcessingConfig.getSetting(Grass7Utils.GRASS_FOLDER) or ''
-        if not os.path.exists(folder):
+        if isMac():
+            folder = ProcessingConfig.getSetting(Grass7Utils.GRASS_FOLDER) or ''
+            if not os.path.exists(folder):
+                folder = None
+        else:
             folder = None
 
         if folder is None:
             # Under MS-Windows, we use OSGEO4W or QGIS Path for folder
             if isWindows():
-                if "OSGEO4W_ROOT" in os.environ:
-                    testfolder = os.path.join(str(os.environ['OSGEO4W_ROOT']), "apps")
+                if "GISBASE" in os.environ:
+                    folder = os.environ["GISBASE"]
                 else:
-                    testfolder = str(QgsApplication.prefixPath())
-                testfolder = os.path.join(testfolder, 'grass')
-                if os.path.isdir(testfolder):
-                    for subfolder in os.listdir(testfolder):
-                        if subfolder.startswith('grass-7'):
-                            folder = os.path.join(testfolder, subfolder)
-                            break
+                    testfolder = os.path.join(str(QgsApplication.prefixPath()), 'grass')
+                    if os.path.isdir(testfolder):
+                        grassfolders = sorted([f for f in os.listdir(testfolder) if f.startswith("grass-7.") and os.path.isdir(os.path.join(testfolder, f))], reverse=True, key=lambda x: [int(v) for v in x[len("grass-"):].split('.') if v != 'svn'])
+                        if grassfolders:
+                            folder = os.path.join(testfolder, grassfolders[0])
             elif isMac():
                 # For MacOSX, we scan some well-known directories
                 # Start with QGIS bundle
-                for version in ['', '7', '70', '71', '72', '74']:
+                for version in ['', '7', '76', '74', '72', '70']:
                     testfolder = os.path.join(str(QgsApplication.prefixPath()),
                                               'grass{}'.format(version))
                     if os.path.isdir(testfolder):
@@ -221,7 +238,7 @@ class Grass7Utils:
                         break
                     # If nothing found, try standalone GRASS installation
                     if folder is None:
-                        for version in ['0', '1', '2', '4']:
+                        for version in ['6', '4', '2', '1', '0']:
                             testfolder = '/Applications/GRASS-7.{}.app/Contents/MacOS'.format(version)
                             if os.path.isdir(testfolder):
                                 folder = testfolder
@@ -351,23 +368,27 @@ class Grass7Utils:
         loglines.append(Grass7Utils.tr('GRASS GIS 7 execution console output'))
         grassOutDone = False
         command, grassenv = Grass7Utils.prepareGrassExecution(commands)
-        #QgsMessageLog.logMessage('exec: {}'.format(command), 'DEBUG', Qgis.Info)
+        # QgsMessageLog.logMessage('exec: {}'.format(command), 'DEBUG', Qgis.Info)
 
         # For MS-Windows, we need to hide the console window.
+        kw = {}
         if isWindows():
             si = subprocess.STARTUPINFO()
             si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             si.wShowWindow = subprocess.SW_HIDE
+            kw['startupinfo'] = si
+            if sys.version_info >= (3, 6):
+                kw['encoding'] = "cp{}".format(Grass7Utils.getWindowsCodePage())
 
         with subprocess.Popen(
                 command,
-                shell=True if isMac() else False,
+                shell=False,
                 stdout=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
                 universal_newlines=True,
                 env=grassenv,
-                startupinfo=si if isWindows() else None
+                **kw
         ) as proc:
             for line in iter(proc.stdout.readline, ''):
                 if 'GRASS_INFO_PERCENT' in line:
@@ -379,7 +400,16 @@ class Grass7Utils:
                     if 'r.out' in line or 'v.out' in line:
                         grassOutDone = True
                     loglines.append(line)
-                    feedback.pushConsoleInfo(line)
+                    if any([l in line for l in ['WARNING', 'ERROR']]):
+                        feedback.reportError(line.strip())
+                    elif 'Segmentation fault' in line:
+                        feedback.reportError(line.strip())
+                        feedback.reportError('\n' + Grass7Utils.tr('GRASS command crashed :( Try a different set of input parameters and consult the GRASS algorithm manual for more information.') + '\n')
+                        if ProcessingConfig.getSetting(Grass7Utils.GRASS_USE_VEXTERNAL):
+                            feedback.reportError(Grass7Utils.tr(
+                                'Suggest disabling the experimental "use v.external" option from the Processing GRASS Provider options.') + '\n')
+                    elif line.strip():
+                        feedback.pushConsoleInfo(line.strip())
 
         # Some GRASS scripts, like r.mapcalculator or r.fillnulls, call
         # other GRASS scripts during execution. This may override any
@@ -388,15 +418,24 @@ class Grass7Utils:
         # commands again.
         if not grassOutDone and outputCommands:
             command, grassenv = Grass7Utils.prepareGrassExecution(outputCommands)
+            # For MS-Windows, we need to hide the console window.
+            kw = {}
+            if isWindows():
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = subprocess.SW_HIDE
+                kw['startupinfo'] = si
+                if sys.version_info >= (3, 6):
+                    kw['encoding'] = "cp{}".format(Grass7Utils.getWindowsCodePage())
             with subprocess.Popen(
                     command,
-                    shell=True if isMac() else False,
+                    shell=False,
                     stdout=subprocess.PIPE,
                     stdin=subprocess.DEVNULL,
                     stderr=subprocess.STDOUT,
                     universal_newlines=True,
                     env=grassenv,
-                    startupinfo=si if isWindows() else None
+                    **kw
             ) as proc:
                 for line in iter(proc.stdout.readline, ''):
                     if 'GRASS_INFO_PERCENT' in line:
@@ -405,9 +444,12 @@ class Grass7Utils:
                                 line[len('GRASS_INFO_PERCENT') + 2:]))
                         except:
                             pass
-                    else:
-                        loglines.append(line)
-                        feedback.pushConsoleInfo(line)
+                    if any([l in line for l in ['WARNING', 'ERROR']]):
+                        loglines.append(line.strip())
+                        feedback.reportError(line.strip())
+                    elif line.strip():
+                        loglines.append(line.strip())
+                        feedback.pushConsoleInfo(line.strip())
 
         if ProcessingConfig.getSetting(Grass7Utils.GRASS_LOG_CONSOLE):
             QgsMessageLog.logMessage('\n'.join(loglines), 'Processing', Qgis.Info)
@@ -523,7 +565,7 @@ class Grass7Utils:
             return 'https://grass.osgeo.org/grass{}/manuals/'.format(version)
         else:
             # GRASS not available!
-            return 'https://grass.osgeo.org/grass72/manuals/'
+            return 'https://grass.osgeo.org/grass76/manuals/'
 
     @staticmethod
     def getSupportedOutputRasterExtensions():

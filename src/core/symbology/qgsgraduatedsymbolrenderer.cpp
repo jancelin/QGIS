@@ -175,7 +175,7 @@ const int QgsRendererRangeLabelFormat::MAX_PRECISION = 15;
 const int QgsRendererRangeLabelFormat::MIN_PRECISION = -6;
 
 QgsRendererRangeLabelFormat::QgsRendererRangeLabelFormat()
-  : mFormat( QStringLiteral( " %1 - %2 " ) )
+  : mFormat( QStringLiteral( "%1 - %2" ) )
   , mReTrailingZeroes( "[.,]?0*$" )
   , mReNegativeZero( "^\\-0(?:[.,]0*)?$" )
 {
@@ -755,8 +755,8 @@ static QList<double> _calcJenksBreaks( QList<double> values, int classes,
 
     sample.resize( std::max( maximumSize, values.size() / 10 ) );
 
-    QgsDebugMsg( QString( "natural breaks (jenks) sample size: %1" ).arg( sample.size() ) );
-    QgsDebugMsg( QString( "values:%1" ).arg( values.size() ) );
+    QgsDebugMsg( QStringLiteral( "natural breaks (jenks) sample size: %1" ).arg( sample.size() ) );
+    QgsDebugMsg( QStringLiteral( "values:%1" ).arg( values.size() ) );
 
     sample[ 0 ] = minimum;
     sample[ 1 ] = maximum;
@@ -927,7 +927,7 @@ void QgsGraduatedSymbolRenderer::updateClasses( QgsVectorLayer *vlayer, Mode mod
     maximum = vlayer->maximumValue( attrNum ).toDouble();
   }
 
-  QgsDebugMsg( QString( "min %1 // max %2" ).arg( minimum ).arg( maximum ) );
+  QgsDebugMsg( QStringLiteral( "min %1 // max %2" ).arg( minimum ).arg( maximum ) );
   QList<double> breaks;
   QList<double> labels;
 

@@ -26,6 +26,12 @@
 #include "qgsvectorlayer.h"
 #include "qgsthreadingutils.h"
 #include "qgsgeometrycollection.h"
+#include "qgsmultisurface.h"
+#include "qgsgeometryfactory.h"
+#include "qgscurvepolygon.h"
+#include "qgspolygon.h"
+#include "qgslinestring.h"
+#include "qgsmultipoint.h"
 
 QgsFeatureIterator QgsVectorLayerUtils::getValuesIterator( const QgsVectorLayer *layer, const QString &fieldOrExpression, bool &ok, bool selectedOnly )
 {
@@ -154,7 +160,7 @@ bool QgsVectorLayerUtils::valueExists( const QgsVectorLayer *layer, int fieldInd
 
   // build up an optimised feature request
   QgsFeatureRequest request;
-  request.setSubsetOfAttributes( QgsAttributeList() );
+  request.setNoAttributes();
   request.setFlags( QgsFeatureRequest::NoGeometry );
 
   // at most we need to check ignoreIds.size() + 1 - the feature not in ignoreIds is the one we're interested in
@@ -380,9 +386,16 @@ QgsFeature QgsVectorLayerUtils::createFeature( const QgsVectorLayer *layer, cons
     bool checkUnique = true;
 
     // in order of priority:
+    // 1. passed attribute value and if field does not have a unique constraint like primary key
+    if ( attributes.contains( idx ) )
+    {
+      v = attributes.value( idx );
+    }
 
-    // 1. client side default expression
-    if ( layer->defaultValueDefinition( idx ).isValid() )
+    // 2. client side default expression
+    // note - deliberately not using else if!
+    if ( ( !v.isValid() || ( fields.at( idx ).constraints().constraints() & QgsFieldConstraints::ConstraintUnique  && QgsVectorLayerUtils::valueExists( layer, idx, v ) ) )
+         && layer->defaultValueDefinition( idx ).isValid() )
     {
       // client side default expression set - takes precedence over all. Why? Well, this is the only default
       // which QGIS users have control over, so we assume that they're deliberately overriding any
@@ -390,9 +403,10 @@ QgsFeature QgsVectorLayerUtils::createFeature( const QgsVectorLayer *layer, cons
       v = layer->defaultValue( idx, newFeature, evalContext );
     }
 
-    // 2. provider side default value clause
+    // 3. provider side default value clause
     // note - not an else if deliberately. Users may return null from a default value expression to fallback to provider defaults
-    if ( !v.isValid() && fields.fieldOrigin( idx ) == QgsFields::OriginProvider )
+    if ( ( !v.isValid() || ( fields.at( idx ).constraints().constraints() & QgsFieldConstraints::ConstraintUnique  && QgsVectorLayerUtils::valueExists( layer, idx, v ) ) )
+         && fields.fieldOrigin( idx ) == QgsFields::OriginProvider )
     {
       int providerIndex = fields.fieldOriginIndex( idx );
       QString providerDefault = layer->dataProvider()->defaultValueClause( providerIndex );
@@ -403,9 +417,10 @@ QgsFeature QgsVectorLayerUtils::createFeature( const QgsVectorLayer *layer, cons
       }
     }
 
-    // 3. provider side default literal
+    // 4. provider side default literal
     // note - deliberately not using else if!
-    if ( !v.isValid() && fields.fieldOrigin( idx ) == QgsFields::OriginProvider )
+    if ( ( !v.isValid() || ( checkUnique && fields.at( idx ).constraints().constraints() & QgsFieldConstraints::ConstraintUnique  && QgsVectorLayerUtils::valueExists( layer, idx, v ) ) )
+         && fields.fieldOrigin( idx ) == QgsFields::OriginProvider )
     {
       int providerIndex = fields.fieldOriginIndex( idx );
       v = layer->dataProvider()->defaultValue( providerIndex );
@@ -416,7 +431,7 @@ QgsFeature QgsVectorLayerUtils::createFeature( const QgsVectorLayer *layer, cons
       }
     }
 
-    // 4. passed attribute value
+    // 5. passed attribute value
     // note - deliberately not using else if!
     if ( !v.isValid() && attributes.contains( idx ) )
     {
@@ -455,15 +470,7 @@ QgsFeature QgsVectorLayerUtils::duplicateFeature( QgsVectorLayer *layer, const Q
   QgsExpressionContext context = layer->createExpressionContext();
   context.setFeature( feature );
 
-  //create the attribute map
-  QgsAttributes srcAttr = feature.attributes();
-  QgsAttributeMap dstAttr;
-  for ( int src = 0; src < srcAttr.count(); ++src )
-  {
-    dstAttr[ src ] = srcAttr.at( src );
-  }
-
-  QgsFeature newFeature = createFeature( layer, feature.geometry(), dstAttr, &context );
+  QgsFeature newFeature = createFeature( layer, feature.geometry(), feature.attributes().toMap(), &context );
 
   const QList<QgsRelation> relations = project->relationManager()->referencedRelations( layer );
 
@@ -501,14 +508,16 @@ QgsFeature QgsVectorLayerUtils::duplicateFeature( QgsVectorLayer *layer, const Q
   return newFeature;
 }
 
-std::unique_ptr<QgsVectorLayerFeatureSource> QgsVectorLayerUtils::getFeatureSource( QPointer<QgsVectorLayer> layer )
+std::unique_ptr<QgsVectorLayerFeatureSource> QgsVectorLayerUtils::getFeatureSource( QPointer<QgsVectorLayer> layer, QgsFeedback *feedback )
 {
   std::unique_ptr<QgsVectorLayerFeatureSource> featureSource;
 
-  auto getFeatureSource = [ layer, &featureSource ]
+  auto getFeatureSource = [ layer, &featureSource, feedback ]
   {
 #if QT_VERSION >= QT_VERSION_CHECK( 5, 10, 0 )
-    Q_ASSERT( QThread::currentThread() == qApp->thread() );
+    Q_ASSERT( QThread::currentThread() == qApp->thread() || feedback );
+#else
+    Q_UNUSED( feedback )
 #endif
     QgsVectorLayer *lyr = layer.data();
 
@@ -518,7 +527,7 @@ std::unique_ptr<QgsVectorLayerFeatureSource> QgsVectorLayerUtils::getFeatureSour
     }
   };
 
-  QgsThreadingUtils::runOnMainThread( getFeatureSource );
+  QgsThreadingUtils::runOnMainThread( getFeatureSource, feedback );
 
   return featureSource;
 }
@@ -588,6 +597,72 @@ QgsFeatureList QgsVectorLayerUtils::makeFeatureCompatible( const QgsFeature &fea
     // Geometry need fixing
     if ( newFHasGeom && layerHasGeom && newF.geometry().wkbType() != inputWkbType )
     {
+      // Curved -> straight
+      if ( !QgsWkbTypes::isCurvedType( inputWkbType ) && QgsWkbTypes::isCurvedType( newF.geometry().wkbType() ) )
+      {
+        QgsGeometry newGeom( newF.geometry().constGet()->segmentize() );
+        newF.setGeometry( newGeom );
+      }
+
+      // polygon -> line
+      if ( QgsWkbTypes::geometryType( inputWkbType ) == QgsWkbTypes::LineGeometry &&
+           newF.geometry().type() == QgsWkbTypes::PolygonGeometry )
+      {
+        // boundary gives us a (multi)line string of exterior + interior rings
+        QgsGeometry newGeom( newF.geometry().constGet()->boundary() );
+        newF.setGeometry( newGeom );
+      }
+      // line -> polygon
+      if ( QgsWkbTypes::geometryType( inputWkbType ) == QgsWkbTypes::PolygonGeometry &&
+           newF.geometry().type() == QgsWkbTypes::LineGeometry )
+      {
+        std::unique_ptr< QgsGeometryCollection > gc( QgsGeometryFactory::createCollectionOfType( inputWkbType ) );
+        const QgsGeometry source = newF.geometry();
+        for ( auto part = source.const_parts_begin(); part != source.const_parts_end(); ++part )
+        {
+          std::unique_ptr< QgsAbstractGeometry > exterior( ( *part )->clone() );
+          if ( QgsCurve *curve = qgsgeometry_cast< QgsCurve * >( exterior.get() ) )
+          {
+            if ( QgsWkbTypes::isCurvedType( inputWkbType ) )
+            {
+              std::unique_ptr< QgsCurvePolygon > cp = qgis::make_unique< QgsCurvePolygon >();
+              cp->setExteriorRing( curve );
+              exterior.release();
+              gc->addGeometry( cp.release() );
+            }
+            else
+            {
+              std::unique_ptr< QgsPolygon > p = qgis::make_unique< QgsPolygon  >();
+              p->setExteriorRing( qgsgeometry_cast< QgsLineString * >( curve ) );
+              exterior.release();
+              gc->addGeometry( p.release() );
+            }
+          }
+        }
+        QgsGeometry newGeom( std::move( gc ) );
+        newF.setGeometry( newGeom );
+      }
+
+      // line/polygon -> points
+      if ( QgsWkbTypes::geometryType( inputWkbType ) == QgsWkbTypes::PointGeometry &&
+           ( newF.geometry().type() == QgsWkbTypes::LineGeometry ||
+             newF.geometry().type() == QgsWkbTypes::PolygonGeometry ) )
+      {
+        // lines/polygons to a point layer, extract all vertices
+        std::unique_ptr< QgsMultiPoint > mp = qgis::make_unique< QgsMultiPoint >();
+        const QgsGeometry source = newF.geometry();
+        QSet< QgsPoint > added;
+        for ( auto vertex = source.vertices_begin(); vertex != source.vertices_end(); ++vertex )
+        {
+          if ( added.contains( *vertex ) )
+            continue; // avoid duplicate points, e.g. start/end of rings
+          mp->addGeometry( ( *vertex ).clone() );
+          added.insert( *vertex );
+        }
+        QgsGeometry newGeom( std::move( mp ) );
+        newF.setGeometry( newGeom );
+      }
+
       // Single -> multi
       if ( QgsWkbTypes::isMultiType( inputWkbType ) && ! newF.geometry().isMultipart( ) )
       {
@@ -631,6 +706,7 @@ QgsFeatureList QgsVectorLayerUtils::makeFeatureCompatible( const QgsFeature &fea
         {
           attrMap[j] = newF.attribute( j );
         }
+        resultFeatures.reserve( parts->partCount() );
         for ( int i = 0; i < parts->partCount( ); i++ )
         {
           QgsGeometry g( parts->geometryN( i )->clone() );

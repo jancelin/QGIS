@@ -16,6 +16,20 @@ tests:
           geometry:
             precision: 7
 
+  - name: Centroid with non-ascii input
+    algorithm: native:centroids
+    params:
+      INPUT:
+        type: vector
+        name: polys_non_ascii_ñññ.gml
+    results:
+      OUTPUT:
+        type: vector
+        name: expected/polys_centroid.gml
+        compare:
+          geometry:
+            precision: 7
+
   - name: Aggregate all
     algorithm: qgis:aggregate
     params:
@@ -1534,6 +1548,18 @@ tests:
         name: expected/export_multiline_info.gml
         type: vector
 
+  - algorithm: qgis:exportaddgeometrycolumns
+    name: Export multipoint info
+    params:
+      CALC_METHOD: 0
+      INPUT:
+        name: multipoints.gml|layername=multipoints
+        type: vector
+    results:
+      OUTPUT:
+        name: expected/add_geometry_info_multipoint.gml
+        type: vector
+
   - algorithm: qgis:texttofloat
     name: Text to float
     params:
@@ -1752,6 +1778,76 @@ tests:
   - algorithm: qgis:idwinterpolation
     name: IDW interpolation using attribute
     params:
+      DISTANCE_COEFFICIENT: 2.0
+      EXTENT: 0.0,8.0,-5.0,3.0 [EPSG:4326]
+      INTERPOLATION_DATA:
+        name: pointsz.gml::~::0::~::1::~::0
+        type: interpolation
+      PIXEL_SIZE: 0.026667
+    results:
+      OUTPUT:
+        hash:
+        - 76d59e1a9905e97fde7da598022d50ec7de15994e61a59e2b6dc952f
+        - 6d2da87e58dfe8fdfb3a1b66543bc68870f7e3292a9ca2674ea3a523
+        type: rasterhash
+
+  - algorithm: qgis:idwinterpolation
+    name: IDW interpolation using Z value
+    params:
+      DISTANCE_COEFFICIENT: 2.0
+      EXTENT: 0.0,8.0,-5.0,3.0 [EPSG:4326]
+      INTERPOLATION_DATA:
+        name: pointsz.gml::~::1::~::1::~::0
+        type: interpolation
+      PIXEL_SIZE: 0.026667
+    results:
+      OUTPUT:
+        hash:
+        - 76d59e1a9905e97fde7da598022d50ec7de15994e61a59e2b6dc952f
+        - 6d2da87e58dfe8fdfb3a1b66543bc68870f7e3292a9ca2674ea3a523
+        type: rasterhash
+
+  - algorithm: qgis:tininterpolation
+    name: TIN interpolation using attribute
+    params:
+      EXTENT: 0.0,8.0,-5.0,3.0 [EPSG:4326]
+      INTERPOLATION_DATA:
+        name: pointsz.gml::~::0::~::1::~::0
+        type: interpolation
+      METHOD: 0
+      PIXEL_SIZE: 0.026667
+    results:
+      OUTPUT:
+        hash:
+        - 1e07ea5c90a16f87df812042d3e89dd5b1216defa7714921f306de94
+        - 6e533a4c2c2e8ef5ca62814a7ad6dd29cb0f0f6eea85baf2a2802870
+        type: rasterhash
+      #TRIANGULATION_FILE:
+      #  name: expected/triangulation.gml
+      #  type: vector
+
+  - algorithm: qgis:tininterpolation
+    name: TIN interpolation using Z value
+    params:
+      EXTENT: 0.0,8.0,-5.0,3.0 [EPSG:4326]
+      INTERPOLATION_DATA:
+        name: pointsz.gml::~::1::~::-1::~::0
+        type: interpolation
+      METHOD: 0
+      PIXEL_SIZE: 0.026667
+    results:
+      OUTPUT:
+        hash:
+          - 1e07ea5c90a16f87df812042d3e89dd5b1216defa7714921f306de94
+          - 6d2da87e58dfe8fdfb3a1b66543bc68870f7e3292a9ca2674ea3a523
+        type: rasterhash
+      #TRIANULATION_FILE:
+      #  name: expected/triangulation.gml
+      #  type: vector
+
+  - algorithm: qgis:idwinterpolation
+    name: IDW interpolation using attribute (old parameters)
+    params:
       COLUMNS: 300
       DISTANCE_COEFFICIENT: 2.0
       EXTENT: 0, 8, -5, 3
@@ -1767,7 +1863,7 @@ tests:
         type: rasterhash
 
   - algorithm: qgis:idwinterpolation
-    name: IDW interpolation using Z value
+    name: IDW interpolation using Z value (old parameters)
     params:
       COLUMNS: 300
       DISTANCE_COEFFICIENT: 2.0
@@ -1784,7 +1880,7 @@ tests:
         type: rasterhash
 
   - algorithm: qgis:tininterpolation
-    name: TIN interpolation using attribute
+    name: TIN interpolation using attribute (old parameters)
     params:
       COLUMNS: 300
       EXTENT: 0, 8, -5, 3
@@ -1804,7 +1900,7 @@ tests:
       #  type: vector
 
   - algorithm: qgis:tininterpolation
-    name: TIN interpolation using Z value
+    name: TIN interpolation using Z value (old parameters)
     params:
       COLUMNS: 300
       EXTENT: 0, 8, -5, 3
@@ -2537,7 +2633,7 @@ tests:
       EXPRESSION: dem@1
     results:
       OUTPUT:
-        hash: ef97a22ee16e0e28bbdc0341449777b1527e37febc3c4339b2c057c9
+        hash: 525577c05dd999239d9c6f95fd5e70d96355da3a0ea71bfcf021e729
         type: rasterhash
 
   - algorithm: qgis:rastercalculator
@@ -2552,7 +2648,7 @@ tests:
       EXPRESSION: dem@1 * 2
     results:
       OUTPUT:
-        hash: fe6e018be13c5a3c17f3f4d0f0dc7686c628cb440b74c4642aa0c939
+        hash: 98daf025230ec9d031f7502c6a80a3b04dd060808d6b7bcb4328e87c
         type: rasterhash
 
   - algorithm: native:orientedminimumboundingbox
@@ -3580,6 +3676,43 @@ tests:
     results:
       OUTPUT:
         name: expected/valid.gml
+        type: vector
+
+  - algorithm: qgis:checkvalidity
+    name: Check validity polygon ring self intersection
+    params:
+      INPUT_LAYER:
+        name: custom/poly_ring_self_intersection.gml|layername=poly_ring_self_intersection
+        type: vector
+      METHOD: 2
+    results:
+      ERROR_OUTPUT:
+        name: expected/poly_ring_self_intersection_error.gml
+        type: vector
+      INVALID_OUTPUT:
+        name: expected/poly_ring_self_intersection_invalid.gml
+        type: vector
+      VALID_OUTPUT:
+        name: expected/poly_ring_self_intersection_valid.gml
+        type: vector
+
+  - algorithm: qgis:checkvalidity
+    name: Check validity polygon ring self intersection, ignoring self intersections
+    params:
+      IGNORE_RING_SELF_INTERSECTION: true
+      INPUT_LAYER:
+        name: custom/poly_ring_self_intersection.gml|layername=poly_ring_self_intersection
+        type: vector
+      METHOD: 2
+    results:
+      ERROR_OUTPUT:
+        name: expected/poly_ring_self_intersection_error_ignore_self.gml
+        type: vector
+      INVALID_OUTPUT:
+        name: expected/poly_ring_self_intersection_invalid_ignore_self.gml
+        type: vector
+      VALID_OUTPUT:
+        name: expected/poly_ring_self_intersection_valid_ignore_self.gml
         type: vector
 
   - algorithm: qgis:polygonize
@@ -5303,6 +5436,19 @@ tests:
         name: expected/multiring_buffer.gml
         type: vector
 
+  - algorithm: native:multiringconstantbuffer
+    name: Multi-ring negative buffer with polygons
+    params:
+      DISTANCE: -0.05
+      INPUT:
+        name: polys.gml
+        type: vector
+      RINGS: 3
+    results:
+      OUTPUT:
+        name: expected/multiring_negative_buffer.gml
+        type: vector
+
   - algorithm: native:segmentizebymaxangle
     name: Segmentize by angle
     params:
@@ -6095,7 +6241,7 @@ tests:
         name: expected/filter_by_z.shp
         type: vector
 
-  - algorithm: native:arrayfeatures
+  - algorithm: native:arraytranslatedfeatures
     name: Array of point features
     params:
       COUNT: 3
@@ -6111,8 +6257,8 @@ tests:
         name: expected/feature_array.shp
         type: vector
 
-  - algorithm: native:parallellines
-    name: Create parallel lines
+  - algorithm: native:arrayoffsetlines
+    name: Array of offset (parallel) lines
     params:
       COUNT: 3
       INPUT:
@@ -6232,5 +6378,39 @@ tests:
         name: expected/interpolate_point_polys.gml
         type: vector
 
+  - algorithm: native:mergevectorlayers
+    name: Merge vector layers with conflicting feature ids
+    params:
+      LAYERS:
+        params:
+        - name: custom/pol.gpkg|layername=pol1
+          type: vector
+        - name: custom/pol.gpkg|layername=pol2
+          type: vector
+        - name: custom/pol.gpkg|layername=pol3
+          type: vector
+        type: multi
+    results:
+      OUTPUT:
+        # If you ever run into this test producing Polygons instead of MultiPolygons as output
+        # that is totally expected and you are invited to replace the file merged_pol.gpkg with
+        # a single polygon version.
+        name: ogr:dbname='expected/merged_pol.gpkg' table="output" (geom) sql=
+        uri: expected/merged_pol.gpkg|layername=merged_pol
+        type: vector
+        compare:
+          fields:
+            path: skip
+
+  - algorithm: qgis:deleteduplicategeometries
+    name: Delete Duplicates with null geometries
+    params:
+      INPUT:
+        name: lines.gml|layername=lines
+        type: vector
+    results:
+      OUTPUT:
+        name: expected/delete_duplicates_with_nulls.gml
+        type: vector
 
 # See ../README.md for a description of the file format

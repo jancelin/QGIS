@@ -729,7 +729,7 @@ QgsGeometry::OperationResult QgsGeometry::addPart( const QgsGeometry &newPart )
   {
     return QgsGeometry::InvalidBaseGeometry;
   }
-  if ( !newPart || !newPart.d->geometry )
+  if ( newPart.isNull() || !newPart.d->geometry )
   {
     return QgsGeometry::AddPartNotMultiGeometry;
   }
@@ -748,10 +748,11 @@ QgsGeometry QgsGeometry::removeInteriorRings( double minimumRingArea ) const
   {
     const QVector<QgsGeometry> parts = asGeometryCollection();
     QVector<QgsGeometry> results;
+    results.reserve( parts.count() );
     for ( const QgsGeometry &part : parts )
     {
       QgsGeometry result = part.removeInteriorRings( minimumRingArea );
-      if ( result )
+      if ( !result.isNull() )
         results << result;
     }
     if ( results.isEmpty() )
@@ -1675,6 +1676,53 @@ QgsVertexIterator QgsGeometry::vertices() const
   return QgsVertexIterator( d->geometry.get() );
 }
 
+QgsAbstractGeometry::part_iterator QgsGeometry::parts_begin()
+{
+  if ( !d->geometry )
+    return QgsAbstractGeometry::part_iterator();
+
+  detach();
+  return d->geometry->parts_begin();
+}
+
+QgsAbstractGeometry::part_iterator QgsGeometry::parts_end()
+{
+  if ( !d->geometry )
+    return QgsAbstractGeometry::part_iterator();
+  return d->geometry->parts_end();
+}
+
+QgsAbstractGeometry::const_part_iterator QgsGeometry::const_parts_begin() const
+{
+  if ( !d->geometry )
+    return QgsAbstractGeometry::const_part_iterator();
+  return d->geometry->const_parts_begin();
+}
+
+QgsAbstractGeometry::const_part_iterator QgsGeometry::const_parts_end() const
+{
+  if ( !d->geometry )
+    return QgsAbstractGeometry::const_part_iterator();
+  return d->geometry->const_parts_end();
+}
+
+QgsGeometryPartIterator QgsGeometry::parts()
+{
+  if ( !d->geometry )
+    return QgsGeometryPartIterator();
+
+  detach();
+  return QgsGeometryPartIterator( d->geometry.get() );
+}
+
+QgsGeometryConstPartIterator QgsGeometry::constParts() const
+{
+  if ( !d->geometry )
+    return QgsGeometryConstPartIterator();
+
+  return QgsGeometryConstPartIterator( d->geometry.get() );
+}
+
 QgsGeometry QgsGeometry::buffer( double distance, int segments ) const
 {
   if ( !d->geometry )
@@ -1728,7 +1776,7 @@ QgsGeometry QgsGeometry::offsetCurve( double distance, int segments, JoinStyle j
     for ( const QgsGeometry &part : parts )
     {
       QgsGeometry result = part.offsetCurve( distance, segments, joinStyle, miterLimit );
-      if ( result )
+      if ( !result.isNull() )
         results << result;
     }
     if ( results.isEmpty() )
@@ -1745,14 +1793,29 @@ QgsGeometry QgsGeometry::offsetCurve( double distance, int segments, JoinStyle j
   {
     QgsGeos geos( d->geometry.get() );
     mLastError.clear();
-    QgsAbstractGeometry *offsetGeom = geos.offsetCurve( distance, segments, joinStyle, miterLimit, &mLastError );
+
+    // GEOS can flip the curve orientation in some circumstances. So record previous orientation and correct if required
+    const QgsCurve::Orientation prevOrientation = qgsgeometry_cast< const QgsCurve * >( d->geometry.get() )->orientation();
+
+    std::unique_ptr< QgsAbstractGeometry > offsetGeom( geos.offsetCurve( distance, segments, joinStyle, miterLimit, &mLastError ) );
     if ( !offsetGeom )
     {
       QgsGeometry result;
       result.mLastError = mLastError;
       return result;
     }
-    return QgsGeometry( offsetGeom );
+
+    if ( const QgsCurve *offsetCurve = qgsgeometry_cast< const QgsCurve * >( offsetGeom.get() ) )
+    {
+      const QgsCurve::Orientation newOrientation = offsetCurve->orientation();
+      if ( newOrientation != prevOrientation )
+      {
+        // GEOS has flipped line orientation, flip it back
+        std::unique_ptr< QgsAbstractGeometry > flipped( offsetCurve->reversed() );
+        offsetGeom = std::move( flipped );
+      }
+    }
+    return QgsGeometry( std::move( offsetGeom ) );
   }
 }
 
@@ -1771,7 +1834,7 @@ QgsGeometry QgsGeometry::singleSidedBuffer( double distance, int segments, Buffe
     for ( const QgsGeometry &part : parts )
     {
       QgsGeometry result = part.singleSidedBuffer( distance, segments, side, joinStyle, miterLimit );
-      if ( result )
+      if ( !result.isNull() )
         results << result;
     }
     if ( results.isEmpty() )
@@ -1829,7 +1892,7 @@ QgsGeometry QgsGeometry::extendLine( double startDistance, double endDistance ) 
     for ( const QgsGeometry &part : parts )
     {
       QgsGeometry result = part.extendLine( startDistance, endDistance );
-      if ( result )
+      if ( !result.isNull() )
         results << result;
     }
     if ( results.isEmpty() )
@@ -2352,13 +2415,89 @@ QgsGeometry QgsGeometry::makeValid() const
   return result;
 }
 
-
-void QgsGeometry::validateGeometry( QVector<QgsGeometry::Error> &errors, ValidationMethod method ) const
+QgsGeometry QgsGeometry::forceRHR() const
 {
-  QgsGeometryValidator::validateGeometry( *this, errors, method );
+  if ( !d->geometry )
+    return QgsGeometry();
+
+  if ( isMultipart() )
+  {
+    const QgsGeometryCollection *collection = qgsgeometry_cast< const QgsGeometryCollection * >( d->geometry.get() );
+    std::unique_ptr< QgsGeometryCollection > newCollection( collection->createEmptyWithSameType() );
+    for ( int i = 0; i < collection->numGeometries(); ++i )
+    {
+      const QgsAbstractGeometry *g = collection->geometryN( i );
+      if ( const QgsCurvePolygon *cp = qgsgeometry_cast< const QgsCurvePolygon * >( g ) )
+      {
+        std::unique_ptr< QgsCurvePolygon > corrected( cp->clone() );
+        corrected->forceRHR();
+        newCollection->addGeometry( corrected.release() );
+      }
+      else
+      {
+        newCollection->addGeometry( g->clone() );
+      }
+    }
+    return QgsGeometry( std::move( newCollection ) );
+  }
+  else
+  {
+    if ( const QgsCurvePolygon *cp = qgsgeometry_cast< const QgsCurvePolygon * >( d->geometry.get() ) )
+    {
+      std::unique_ptr< QgsCurvePolygon > corrected( cp->clone() );
+      corrected->forceRHR();
+      return QgsGeometry( std::move( corrected ) );
+    }
+    else
+    {
+      // not a curve polygon, so return unchanged
+      return *this;
+    }
+  }
 }
 
-bool QgsGeometry::isGeosValid() const
+
+void QgsGeometry::validateGeometry( QVector<QgsGeometry::Error> &errors, const ValidationMethod method, const QgsGeometry::ValidityFlags flags ) const
+{
+  errors.clear();
+  if ( !d->geometry )
+    return;
+
+  // avoid expensive calcs for trivial point geometries
+  if ( QgsWkbTypes::geometryType( d->geometry->wkbType() ) == QgsWkbTypes::PointGeometry )
+  {
+    return;
+  }
+
+  switch ( method )
+  {
+    case ValidatorQgisInternal:
+      QgsGeometryValidator::validateGeometry( *this, errors, method );
+      return;
+
+    case ValidatorGeos:
+    {
+      QgsGeos geos( d->geometry.get() );
+      QString error;
+      QgsGeometry errorLoc;
+      if ( !geos.isValid( &error, flags & FlagAllowSelfTouchingHoles, &errorLoc ) )
+      {
+        if ( errorLoc.isNull() )
+        {
+          errors.append( QgsGeometry::Error( error ) );
+        }
+        else
+        {
+          const QgsPointXY point = errorLoc.asPoint();
+          errors.append( QgsGeometry::Error( error, point ) );
+        }
+        return;
+      }
+    }
+  }
+}
+
+bool QgsGeometry::isGeosValid( const QgsGeometry::ValidityFlags flags ) const
 {
   if ( !d->geometry )
   {
@@ -2373,7 +2512,7 @@ bool QgsGeometry::isGeosValid() const
 
   QgsGeos geos( d->geometry.get() );
   mLastError.clear();
-  return geos.isValid( &mLastError );
+  return geos.isValid( &mLastError, flags & FlagAllowSelfTouchingHoles, nullptr );
 }
 
 bool QgsGeometry::isSimple() const
@@ -2672,11 +2811,6 @@ void QgsGeometry::convertPointList( const QgsPointSequence &input, QVector<QgsPo
   {
     output.append( QgsPointXY( p.x(), p.y() ) );
   }
-}
-
-QgsGeometry::operator bool() const
-{
-  return d->geometry.get();
 }
 
 void QgsGeometry::convertToPolyline( const QgsPointSequence &input, QgsPolylineXY &output )

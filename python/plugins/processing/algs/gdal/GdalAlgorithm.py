@@ -35,7 +35,8 @@ from qgis.core import (QgsApplication,
                        QgsProcessingFeatureSourceDefinition,
                        QgsProcessingAlgorithm,
                        QgsProcessingContext,
-                       QgsProcessingFeedback)
+                       QgsProcessingFeedback,
+                       QgsProviderRegistry)
 
 from processing.algs.gdal.GdalAlgorithmDialog import GdalAlgorithmDialog
 from processing.algs.gdal.GdalUtils import GdalUtils
@@ -63,7 +64,7 @@ class GdalAlgorithm(QgsProcessingAlgorithm):
         return self.__class__()
 
     def createCustomParametersWidget(self, parent):
-        return GdalAlgorithmDialog(self)
+        return GdalAlgorithmDialog(self, parent=parent)
 
     def flags(self):
         return QgsProcessingAlgorithm.FlagSupportsBatch # cannot cancel!
@@ -100,14 +101,20 @@ class GdalAlgorithm(QgsProcessingAlgorithm):
                 ogr_data_path = 'path_to_data_file'
                 ogr_layer_name = 'layer_name'
         elif input_layer.dataProvider().name() == 'ogr':
-            if executing:
+            if executing and isinstance(parameters[parameter_name], QgsProcessingFeatureSourceDefinition) and parameters[parameter_name].selectedFeaturesOnly:
                 # parameter is a vector layer, with OGR data provider
                 # so extract selection if required
                 ogr_data_path = self.parameterAsCompatibleSourceLayerPath(parameters, parameter_name, context,
                                                                           QgsVectorFileWriter.supportedFormatExtensions(),
                                                                           feedback=feedback)
-                ogr_layer_name = GdalUtils.ogrLayerName(input_layer.dataProvider().dataSourceUri())
+                parts = QgsProviderRegistry.instance().decodeUri('ogr', ogr_data_path)
+                ogr_data_path = parts['path']
+                if 'layerName' in parts and parts['layerName']:
+                    ogr_layer_name = parts['layerName']
+                else:
+                    ogr_layer_name = GdalUtils.ogrLayerName(ogr_data_path)
             else:
+                #either not using the selection, or
                 #not executing - don't worry about 'selected features only' handling. It has no meaning
                 #for the command line preview since it has no meaning outside of a QGIS session!
                 ogr_data_path = GdalUtils.ogrConnectionStringAndFormatFromLayer(input_layer)[0]
@@ -115,7 +122,7 @@ class GdalAlgorithm(QgsProcessingAlgorithm):
         else:
             # vector layer, but not OGR - get OGR compatible path
             # TODO - handle "selected features only" mode!!
-            ogr_data_path = GdalUtils.ogrConnectionString(input_layer.dataProvider().dataSourceUri(), context)
+            ogr_data_path = GdalUtils.ogrConnectionStringFromLayer(input_layer)
             ogr_layer_name = GdalUtils.ogrLayerName(input_layer.dataProvider().dataSourceUri())
         return ogr_data_path, ogr_layer_name
 
@@ -135,16 +142,6 @@ class GdalAlgorithm(QgsProcessingAlgorithm):
             results[k] = v
 
         return results
-
-    def helpUrl(self):
-        helpPath = GdalUtils.gdalHelpPath()
-        if helpPath == '':
-            return None
-
-        if os.path.exists(helpPath):
-            return QUrl.fromLocalFile(os.path.join(helpPath, '{}.html'.format(self.commandName()))).toString()
-        else:
-            return helpPath + '{}.html'.format(self.commandName())
 
     def commandName(self):
         parameters = {}

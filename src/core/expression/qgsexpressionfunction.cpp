@@ -884,6 +884,22 @@ static QVariant fcnAggregateArray( const QVariantList &values, const QgsExpressi
   return fcnAggregateGeneric( QgsAggregateCalculator::ArrayAggregate, values, QgsAggregateCalculator::AggregateParameters(), context, parent );
 }
 
+static QVariant fcnMapScale( const QVariantList &, const QgsExpressionContext *context, QgsExpression *, const QgsExpressionNodeFunction * )
+{
+  if ( !context )
+    return QVariant();
+
+  QVariant scale = context->variable( QStringLiteral( "map_scale" ) );
+  bool ok = false;
+  if ( !scale.isValid() || scale.isNull() )
+    return QVariant();
+
+  const double v = scale.toDouble( &ok );
+  if ( ok )
+    return v;
+  return QVariant();
+}
+
 static QVariant fcnClamp( const QVariantList &values, const QgsExpressionContext *, QgsExpression *parent, const QgsExpressionNodeFunction * )
 {
   double minValue = QgsExpressionUtils::getDoubleValue( values.at( 0 ), parent );
@@ -1014,73 +1030,9 @@ static QVariant fcnWordwrap( const QVariantList &values, const QgsExpressionCont
     QString str = QgsExpressionUtils::getStringValue( values.at( 0 ), parent );
     qlonglong wrap = QgsExpressionUtils::getIntValue( values.at( 1 ), parent );
 
-    if ( !str.isEmpty() && wrap != 0 )
-    {
-      QString newstr;
-      QRegExp rx;
-      QString customdelimiter = QgsExpressionUtils::getStringValue( values.at( 2 ), parent );
-      int delimiterlength;
+    QString customdelimiter = QgsExpressionUtils::getStringValue( values.at( 2 ), parent );
 
-      if ( customdelimiter.length() > 0 )
-      {
-        rx.setPatternSyntax( QRegExp::FixedString );
-        rx.setPattern( customdelimiter );
-        delimiterlength = customdelimiter.length();
-      }
-      else
-      {
-        // \x200B is a ZERO-WIDTH SPACE, needed for worwrap to support a number of complex scripts (Indic, Arabic, etc.)
-        rx.setPattern( QStringLiteral( "[\\s\\x200B]" ) );
-        delimiterlength = 1;
-      }
-
-
-      QStringList lines = str.split( '\n' );
-      int strlength, strcurrent, strhit, lasthit;
-
-      for ( int i = 0; i < lines.size(); i++ )
-      {
-        strlength = lines[i].length();
-        strcurrent = 0;
-        strhit = 0;
-        lasthit = 0;
-
-        while ( strcurrent < strlength )
-        {
-          // positive wrap value = desired maximum line width to wrap
-          // negative wrap value = desired minimum line width before wrap
-          if ( wrap > 0 )
-          {
-            //first try to locate delimiter backwards
-            strhit = lines[i].lastIndexOf( rx, strcurrent + wrap );
-            if ( strhit == lasthit || strhit == -1 )
-            {
-              //if no new backward delimiter found, try to locate forward
-              strhit = lines[i].indexOf( rx, strcurrent + std::labs( wrap ) );
-            }
-            lasthit = strhit;
-          }
-          else
-          {
-            strhit = lines[i].indexOf( rx, strcurrent + std::labs( wrap ) );
-          }
-          if ( strhit > -1 )
-          {
-            newstr.append( lines[i].midRef( strcurrent, strhit - strcurrent ) );
-            newstr.append( '\n' );
-            strcurrent = strhit + delimiterlength;
-          }
-          else
-          {
-            newstr.append( lines[i].midRef( strcurrent ) );
-            strcurrent = strlength;
-          }
-        }
-        if ( i < lines.size() - 1 ) newstr.append( '\n' );
-      }
-
-      return QVariant( newstr );
-    }
+    return QgsStringUtils::wordWrap( str, static_cast< int >( wrap ), wrap > 0, customdelimiter );
   }
 
   return QVariant();
@@ -3493,6 +3445,21 @@ static QVariant fcnColorRgb( const QVariantList &values, const QgsExpressionCont
   return QStringLiteral( "%1,%2,%3" ).arg( color.red() ).arg( color.green() ).arg( color.blue() );
 }
 
+static QVariant fcnTry( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction * )
+{
+  QgsExpressionNode *node = QgsExpressionUtils::getNode( values.at( 0 ), parent );
+  QVariant value = node->eval( parent, context );
+  if ( parent->hasEvalError() )
+  {
+    parent->setEvalErrorString( QString() );
+    node = QgsExpressionUtils::getNode( values.at( 1 ), parent );
+    ENSURE_NO_EVAL_ERROR;
+    value = node->eval( parent, context );
+    ENSURE_NO_EVAL_ERROR;
+  }
+  return value;
+}
+
 static QVariant fcnIf( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction * )
 {
   QgsExpressionNode *node = QgsExpressionUtils::getNode( values.at( 0 ), parent );
@@ -3848,7 +3815,7 @@ static QVariant fcnGetGeometry( const QVariantList &values, const QgsExpressionC
   return QVariant();
 }
 
-static QVariant fcnTransformGeometry( const QVariantList &values, const QgsExpressionContext *, QgsExpression *parent, const QgsExpressionNodeFunction * )
+static QVariant fcnTransformGeometry( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction * )
 {
   QgsGeometry fGeom = QgsExpressionUtils::getGeometry( values.at( 0 ), parent );
   QString sAuthId = QgsExpressionUtils::getStringValue( values.at( 1 ), parent );
@@ -3861,9 +3828,10 @@ static QVariant fcnTransformGeometry( const QVariantList &values, const QgsExpre
   if ( ! d.isValid() )
     return QVariant::fromValue( fGeom );
 
-  Q_NOWARN_DEPRECATED_PUSH
-  QgsCoordinateTransform t( s, d );
-  Q_NOWARN_DEPRECATED_POP
+  QgsCoordinateTransformContext tContext;
+  if ( context )
+    tContext = context->variable( QStringLiteral( "_project_transform_context" ) ).value<QgsCoordinateTransformContext>();
+  QgsCoordinateTransform t( s, d, tContext );
   try
   {
     if ( fGeom.transform( t ) == 0 )
@@ -4020,21 +3988,34 @@ static QVariant fcnGetLayerProperty( const QVariantList &values, const QgsExpres
   if ( !layer )
     return QVariant();
 
+  // here, we always prefer the layer metadata values over the older server-specific published values
   QString layerProperty = QgsExpressionUtils::getStringValue( values.at( 1 ), parent );
   if ( QString::compare( layerProperty, QStringLiteral( "name" ), Qt::CaseInsensitive ) == 0 )
     return layer->name();
   else if ( QString::compare( layerProperty, QStringLiteral( "id" ), Qt::CaseInsensitive ) == 0 )
     return layer->id();
   else if ( QString::compare( layerProperty, QStringLiteral( "title" ), Qt::CaseInsensitive ) == 0 )
-    return layer->title();
+    return !layer->metadata().title().isEmpty() ? layer->metadata().title() : layer->title();
   else if ( QString::compare( layerProperty, QStringLiteral( "abstract" ), Qt::CaseInsensitive ) == 0 )
-    return layer->abstract();
+    return !layer->metadata().abstract().isEmpty() ? layer->metadata().abstract() : layer->abstract();
   else if ( QString::compare( layerProperty, QStringLiteral( "keywords" ), Qt::CaseInsensitive ) == 0 )
+  {
+    QStringList keywords;
+    const QgsAbstractMetadataBase::KeywordMap keywordMap = layer->metadata().keywords();
+    for ( auto it = keywordMap.constBegin(); it != keywordMap.constEnd(); ++it )
+    {
+      keywords.append( it.value() );
+    }
+    if ( !keywords.isEmpty() )
+      return keywords;
     return layer->keywordList();
+  }
   else if ( QString::compare( layerProperty, QStringLiteral( "data_url" ), Qt::CaseInsensitive ) == 0 )
     return layer->dataUrl();
   else if ( QString::compare( layerProperty, QStringLiteral( "attribution" ), Qt::CaseInsensitive ) == 0 )
-    return layer->attribution();
+  {
+    return !layer->metadata().rights().isEmpty() ? QVariant( layer->metadata().rights() ) : QVariant( layer->attribution() );
+  }
   else if ( QString::compare( layerProperty, QStringLiteral( "attribution_url" ), Qt::CaseInsensitive ) == 0 )
     return layer->attributionUrl();
   else if ( QString::compare( layerProperty, QStringLiteral( "source" ), Qt::CaseInsensitive ) == 0 )
@@ -4380,17 +4361,7 @@ static QVariant fcnHstoreToMap( const QVariantList &values, const QgsExpressionC
 static QVariant fcnMapToHstore( const QVariantList &values, const QgsExpressionContext *, QgsExpression *parent, const QgsExpressionNodeFunction * )
 {
   QVariantMap map = QgsExpressionUtils::getMapValue( values.at( 0 ), parent );
-  QStringList list;
-
-  for ( QVariantMap::const_iterator it = map.constBegin(); it != map.constEnd(); ++it )
-  {
-    QString key = it.key();
-    QString value = it.value().toString();
-    list << QString( "\"%1\"=>\"%2\"" ).arg( key.replace( "\\", "\\\\" ).replace( "\"", "\\\"" ),
-         value.replace( "\\", "\\\\" ).replace( "\"", "\\\"" ) );
-  }
-
-  return list.join( ',' );
+  return QgsHstoreUtils::build( map );
 }
 
 static QVariant fcnMap( const QVariantList &values, const QgsExpressionContext *, QgsExpression *parent, const QgsExpressionNodeFunction * )
@@ -4520,6 +4491,7 @@ const QList<QgsExpressionFunction *> &QgsExpression::Functions()
         << new QgsStaticExpressionFunction( QStringLiteral( "to_dms" ), QgsExpressionFunction::ParameterList() << QgsExpressionFunction::Parameter( QStringLiteral( "value" ) ) << QgsExpressionFunction::Parameter( QStringLiteral( "axis" ) ) << QgsExpressionFunction::Parameter( QStringLiteral( "precision" ) ) << QgsExpressionFunction::Parameter( QStringLiteral( "formatting" ), true ), fcnToDegreeMinuteSecond, QStringLiteral( "Conversions" ), QString(), false, QSet<QString>(), false, QStringList() << QStringLiteral( "todms" ) )
         << new QgsStaticExpressionFunction( QStringLiteral( "coalesce" ), -1, fcnCoalesce, QStringLiteral( "Conditionals" ), QString(), false, QSet<QString>(), false, QStringList(), true )
         << new QgsStaticExpressionFunction( QStringLiteral( "if" ), 3, fcnIf, QStringLiteral( "Conditionals" ), QString(), false, QSet<QString>(), true )
+        << new QgsStaticExpressionFunction( QStringLiteral( "try" ), QgsExpressionFunction::ParameterList() << QgsExpressionFunction::Parameter( QStringLiteral( "expression" ) ) << QgsExpressionFunction::Parameter( QStringLiteral( "alternative" ), true, QVariant() ), fcnTry, QStringLiteral( "Conditionals" ), QString(), false, QSet<QString>(), true )
 
         << new QgsStaticExpressionFunction( QStringLiteral( "aggregate" ),
                                             QgsExpressionFunction::ParameterList()
@@ -4667,7 +4639,10 @@ const QList<QgsExpressionFunction *> &QgsExpression::Functions()
         << new QgsStaticExpressionFunction( QStringLiteral( "color_part" ), 2, fncColorPart, QStringLiteral( "Color" ) )
         << new QgsStaticExpressionFunction( QStringLiteral( "darker" ), 2, fncDarker, QStringLiteral( "Color" ) )
         << new QgsStaticExpressionFunction( QStringLiteral( "lighter" ), 2, fncLighter, QStringLiteral( "Color" ) )
-        << new QgsStaticExpressionFunction( QStringLiteral( "set_color_part" ), 3, fncSetColorPart, QStringLiteral( "Color" ) );
+        << new QgsStaticExpressionFunction( QStringLiteral( "set_color_part" ), 3, fncSetColorPart, QStringLiteral( "Color" ) )
+
+        // deprecated stuff - hidden from users
+        << new QgsStaticExpressionFunction( QStringLiteral( "$scale" ), QgsExpressionFunction::ParameterList(), fcnMapScale, QStringLiteral( "deprecated" ) );
 
     QgsStaticExpressionFunction *geomFunc = new QgsStaticExpressionFunction( QStringLiteral( "$geometry" ), 0, fcnGeometry, QStringLiteral( "GeometryGroup" ), QString(), true );
     geomFunc->setIsStatic( false );
@@ -5089,7 +5064,7 @@ QgsArrayForeachExpressionFunction::QgsArrayForeachExpressionFunction()
   : QgsExpressionFunction( QStringLiteral( "array_foreach" ), QgsExpressionFunction::ParameterList()
                            << QgsExpressionFunction::Parameter( QStringLiteral( "array" ) )
                            << QgsExpressionFunction::Parameter( QStringLiteral( "expression" ) ),
-                           QCoreApplication::tr( "Arrays" ) )
+                           QStringLiteral( "Arrays" ) )
 {
 
 }
@@ -5183,7 +5158,7 @@ QgsArrayFilterExpressionFunction::QgsArrayFilterExpressionFunction()
   : QgsExpressionFunction( QStringLiteral( "array_filter" ), QgsExpressionFunction::ParameterList()
                            << QgsExpressionFunction::Parameter( QStringLiteral( "array" ) )
                            << QgsExpressionFunction::Parameter( QStringLiteral( "expression" ) ),
-                           QCoreApplication::tr( "Arrays" ) )
+                           QStringLiteral( "Arrays" ) )
 {
 
 }
@@ -5278,7 +5253,7 @@ QgsWithVariableExpressionFunction::QgsWithVariableExpressionFunction()
                            QgsExpressionFunction::Parameter( QStringLiteral( "name" ) )
                            << QgsExpressionFunction::Parameter( QStringLiteral( "value" ) )
                            << QgsExpressionFunction::Parameter( QStringLiteral( "expression" ) ),
-                           QCoreApplication::tr( "General" ) )
+                           QStringLiteral( "General" ) )
 {
 
 }

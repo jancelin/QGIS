@@ -317,6 +317,7 @@ class CORE_EXPORT QgsSymbolLayer
      * Sets a data defined property for the layer. Any existing property with the same key
      * will be overwritten.
      * \see dataDefinedProperties()
+     * \see Property
      * \since QGIS 3.0
      */
     virtual void setDataDefinedProperty( Property key, const QgsProperty &property );
@@ -375,6 +376,7 @@ class CORE_EXPORT QgsSymbolLayer
     /**
      * Returns a reference to the symbol layer's property collection, used for data defined overrides.
      * \see setDataDefinedProperties()
+     * \see Property
      * \since QGIS 3.0
      */
     QgsPropertyCollection &dataDefinedProperties() { return mDataDefinedProperties; }
@@ -393,6 +395,13 @@ class CORE_EXPORT QgsSymbolLayer
      * \since QGIS 3.0
      */
     void setDataDefinedProperties( const QgsPropertyCollection &collection ) { mDataDefinedProperties = collection; }
+
+    /**
+     * Returns true if the symbol layer (or any of its sub-symbols) contains data defined properties.
+     *
+     * \since QGIS 3.4.5
+     */
+    virtual bool hasDataDefinedProperties() const;
 
   protected:
 
@@ -764,12 +773,43 @@ class CORE_EXPORT QgsMarkerSymbolLayer : public QgsSymbolLayer
 class CORE_EXPORT QgsLineSymbolLayer : public QgsSymbolLayer
 {
   public:
+
+    //! Options for filtering rings when the line symbol layer is being used to render a polygon's rings.
+    enum RenderRingFilter
+    {
+      AllRings, //!< Render both exterior and interior rings
+      ExteriorRingOnly, //!< Render the exterior ring only
+      InteriorRingsOnly, //!< Render the interior rings only
+    };
+
     virtual void renderPolyline( const QPolygonF &points, QgsSymbolRenderContext &context ) = 0;
 
     virtual void renderPolygonStroke( const QPolygonF &points, QList<QPolygonF> *rings, QgsSymbolRenderContext &context );
 
     virtual void setWidth( double width ) { mWidth = width; }
+
+    /**
+     * Returns the estimated width for the line symbol layer.
+     *
+     * \warning This returned value is inaccurate if the symbol layer has sub-symbols with
+     * different width units. Use the overload accepting a QgsRenderContext
+     * argument instead for accurate sizes in this case.
+     *
+     * \see setWidth()
+     */
     virtual double width() const { return mWidth; }
+
+    /**
+     * Returns the line symbol layer width, in painter units.
+     *
+     * This method returns an accurate width by calculating the actual rendered
+     * width of the symbol layer using the provided render \a context.
+     *
+     * \see setWidth()
+     *
+     * \since QGIS 3.4.5
+     */
+    virtual double width( const QgsRenderContext &context ) const;
 
     double offset() const { return mOffset; }
     void setOffset( double offset ) { mOffset = offset; }
@@ -816,6 +856,30 @@ class CORE_EXPORT QgsLineSymbolLayer : public QgsSymbolLayer
 
     double dxfWidth( const QgsDxfExport &e, QgsSymbolRenderContext &context ) const override;
 
+    /**
+     * Returns the line symbol layer's ring filter, which controls which rings are
+     * rendered when the line symbol is being used to draw a polygon's rings.
+     *
+     * This setting has no effect when the line symbol is not being rendered
+     * for a polygon.
+     *
+     * \see setRingFilter()
+     * \since QGIS 3.4.3
+     */
+    RenderRingFilter ringFilter() const;
+
+    /**
+     * Sets the line symbol layer's ring \a filter, which controls which rings are
+     * rendered when the line symbol is being used to draw a polygon's rings.
+     *
+     * This setting has no effect when the line symbol is not being rendered
+     * for a polygon.
+     *
+     * \see ringFilter()
+     * \since QGIS 3.4.3
+     */
+    void setRingFilter( QgsLineSymbolLayer::RenderRingFilter filter );
+
   protected:
     QgsLineSymbolLayer( bool locked = false );
 
@@ -825,6 +889,8 @@ class CORE_EXPORT QgsLineSymbolLayer : public QgsSymbolLayer
     double mOffset = 0;
     QgsUnitTypes::RenderUnit mOffsetUnit = QgsUnitTypes::RenderMillimeters;
     QgsMapUnitScale mOffsetMapUnitScale;
+
+    RenderRingFilter mRingFilter = AllRings;
 };
 
 /**

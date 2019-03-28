@@ -1,7 +1,6 @@
 FIND_PROGRAM(QT_LRELEASE_EXECUTABLE NAMES lrelease-qt5 lrelease)
 
 MACRO(ADD_TRANSLATION_FILES _sources )
-
     FOREACH (_current_FILE ${ARGN})
       GET_FILENAME_COMPONENT(_in ${_current_FILE} ABSOLUTE)
       GET_FILENAME_COMPONENT(_basename ${_current_FILE} NAME_WE)
@@ -26,21 +25,21 @@ SET(TS_FILES qgis_ar.ts qgis_bg.ts qgis_bs.ts qgis_ca.ts qgis_cs.ts qgis_da.ts q
 
 ADD_TRANSLATION_FILES (QM_FILES ${TS_FILES})
 
-IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+IF (UNIX AND NOT APPLE AND PYQT5_FOUND)
   ADD_CUSTOM_COMMAND(
     OUTPUT ${CMAKE_BINARY_DIR}/org.qgis.qgis.desktop ${CMAKE_BINARY_DIR}/org.qgis.qgis.appdata.xml
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     COMMAND ${PYTHON_EXECUTABLE}
     ARGS ${CMAKE_SOURCE_DIR}/scripts/ts2appinfo.py "${CMAKE_BINARY_DIR}"
     COMMENT "Updating appinfo files..."
-    DEPENDS ${QM_FILES}
+    DEPENDS ${QM_FILES} ${CMAKE_SOURCE_DIR}/linux/org.qgis.qgis.desktop.in ${CMAKE_SOURCE_DIR}/linux/org.qgis.qgis.appdata.xml.in
   )
 
   SET(MD_FILES ${CMAKE_BINARY_DIR}/org.qgis.qgis.desktop ${CMAKE_BINARY_DIR}/org.qgis.qgis.appdata.xml)
 
   INSTALL(FILES ${CMAKE_BINARY_DIR}/org.qgis.qgis.desktop DESTINATION share/applications)
   INSTALL(FILES ${CMAKE_BINARY_DIR}/org.qgis.qgis.appdata.xml DESTINATION share/metainfo)
-ENDIF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+ENDIF (UNIX AND NOT APPLE AND PYQT5_FOUND)
 
 # creating a custom target is needed to make the files build
 # "ALL" means that it will be run by default

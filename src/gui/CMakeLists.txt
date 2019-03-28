@@ -197,6 +197,7 @@ SET(QGIS_GUI_SRCS
   processing/qgsprocessingalgorithmdialogbase.cpp
   processing/qgsprocessingconfigurationwidgets.cpp
   processing/qgsprocessingguiregistry.cpp
+  processing/qgsprocessingmatrixparameterdialog.cpp
   processing/qgsprocessingmodelerparameterwidget.cpp
   processing/qgsprocessingrecentalgorithmlog.cpp
   processing/qgsprocessingtoolboxmodel.cpp
@@ -522,6 +523,7 @@ SET(QGIS_GUI_MOC_HDRS
   qgsrasterlayersaveasdialog.h
   qgsrasterpyramidsoptionswidget.h
   qgsrelationeditorwidget.h
+  qgsrubberband.h
   qgsscalecombobox.h
   qgsscalerangewidget.h
   qgsscalevisibilitydialog.h
@@ -731,6 +733,7 @@ SET(QGIS_GUI_MOC_HDRS
   processing/qgsprocessingalgorithmconfigurationwidget.h
   processing/qgsprocessingalgorithmdialogbase.h
   processing/qgsprocessingconfigurationwidgets.h
+  processing/qgsprocessingmatrixparameterdialog.h
   processing/qgsprocessingmodelerparameterwidget.h
   processing/qgsprocessingrecentalgorithmlog.h
   processing/qgsprocessingtoolboxmodel.h
@@ -778,7 +781,6 @@ SET(QGIS_GUI_HDRS
   qgsmaplayerconfigwidgetfactory.h
   qgsmapmouseevent.h
   qgsmaptip.h
-  qgsrubberband.h
   qgssnapindicator.h
   qgssqlcomposerdialog.h
   qgstablewidgetitem.h

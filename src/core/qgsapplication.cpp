@@ -36,6 +36,7 @@
 #include "qgsrasterrendererregistry.h"
 #include "qgsrendererregistry.h"
 #include "qgssymbollayerregistry.h"
+#include "qgssymbollayerutils.h"
 #include "qgspluginlayerregistry.h"
 #include "qgsmessagelog.h"
 #include "qgsannotationregistry.h"
@@ -65,6 +66,7 @@
 #include <QPixmap>
 #include <QThreadPool>
 #include <QLocale>
+#include <QStyle>
 
 #ifndef Q_OS_WIN
 #include <netinet/in.h>
@@ -200,6 +202,7 @@ void QgsApplication::init( QString profileFolder )
   qRegisterMetaType<QgsLayoutRenderContext::Flags>( "QgsLayoutRenderContext::Flags" );
   qRegisterMetaType<QgsStyle::StyleEntity>( "QgsStyle::StyleEntity" );
   qRegisterMetaType<QgsCoordinateReferenceSystem>( "QgsCoordinateReferenceSystem" );
+  qRegisterMetaType<QgsAuthManager::MessageLevel>( "QgsAuthManager::MessageLevel" );
 
   ( void ) resolvePkgPath();
 
@@ -368,7 +371,7 @@ bool QgsApplication::notify( QObject *receiver, QEvent *event )
   }
   catch ( ... )
   {
-    QgsDebugMsg( "Caught unhandled unknown exception" );
+    QgsDebugMsg( QStringLiteral( "Caught unhandled unknown exception" ) );
     if ( qApp->thread() == QThread::currentThread() )
       QMessageBox::critical( activeWindow(), tr( "Exception" ), tr( "unknown exception" ) );
   }
@@ -596,13 +599,6 @@ QCursor QgsApplication::getThemeCursor( Cursor cursor )
   {
     // Apply scaling
     float scale = Qgis::UI_SCALE_FACTOR * app->fontMetrics().height() / 32.0;
-#ifdef Q_OS_MACX
-    if ( app->devicePixelRatio() >= 2 )
-    {
-      scale *= app->devicePixelRatio();
-      activeX = activeY = 8;
-    }
-#endif
     cursorIcon = QCursor( icon.pixmap( std::ceil( scale * 32 ), std::ceil( scale * 32 ) ), std::ceil( scale * activeX ), std::ceil( scale * activeY ) );
   }
   if ( app )
@@ -666,11 +662,11 @@ QString QgsApplication::resolvePkgPath()
       ABISYM( mBuildSourcePath ) = f.readLine().trimmed();
       ABISYM( mBuildOutputPath ) = f.readLine().trimmed();
       QgsDebugMsgLevel( QStringLiteral( "Running from build directory!" ), 4 );
-      QgsDebugMsgLevel( QStringLiteral( "- source directory: %1" ).arg( ABISYM( mBuildSourcePath ).toUtf8().data() ), 4 );
-      QgsDebugMsgLevel( QStringLiteral( "- output directory of the build: %1" ).arg( ABISYM( mBuildOutputPath ).toUtf8().data() ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "- source directory: %1" ).arg( ABISYM( mBuildSourcePath ).toUtf8().constData() ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "- output directory of the build: %1" ).arg( ABISYM( mBuildOutputPath ).toUtf8().constData() ), 4 );
 #if defined(_MSC_VER) && !defined(USING_NMAKE) && !defined(USING_NINJA)
       ABISYM( mCfgIntDir ) = appPath.split( '/', QString::SkipEmptyParts ).last();
-      qDebug( "- cfg: %s", ABISYM( mCfgIntDir ).toUtf8().data() );
+      qDebug( "- cfg: %s", ABISYM( mCfgIntDir ).toUtf8().constData() );
 #endif
     }
   }
@@ -730,22 +726,22 @@ void QgsApplication::setUITheme( const QString &themeName )
 
   QString path = themes.value( themeName );
   QString stylesheetname = path + "/style.qss";
-  QString autostylesheet = stylesheetname + ".auto";
 
   QFile file( stylesheetname );
   QFile variablesfile( path + "/variables.qss" );
-  QFile fileout( autostylesheet );
 
   QFileInfo variableInfo( variablesfile );
 
-  if ( variableInfo.exists() && variablesfile.open( QIODevice::ReadOnly ) )
+  if ( !file.open( QIODevice::ReadOnly ) || ( variableInfo.exists() && !variablesfile.open( QIODevice::ReadOnly ) ) )
   {
-    if ( !file.open( QIODevice::ReadOnly ) || !fileout.open( QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate ) )
-    {
-      return;
-    }
+    return;
+  }
 
-    QString styledata = file.readAll();
+  QString styledata = file.readAll();
+  styledata.replace( QStringLiteral( "@theme_path" ), path );
+
+  if ( variableInfo.exists() )
+  {
     QTextStream in( &variablesfile );
     while ( !in.atEnd() )
     {
@@ -760,16 +756,49 @@ void QgsApplication::setUITheme( const QString &themeName )
       }
     }
     variablesfile.close();
-    QTextStream out( &fileout );
-    out << styledata;
-    fileout.close();
-    file.close();
-    stylesheetname = autostylesheet;
+  }
+  file.close();
+
+  if ( Qgis::UI_SCALE_FACTOR != 1.0 )
+  {
+    // apply OS-specific UI scale factor to stylesheet's em values
+    int index = 0;
+    QRegularExpression regex( QStringLiteral( "(?<=[\\s:])([0-9\\.]+)(?=em)" ) );
+    QRegularExpressionMatch match = regex.match( styledata, index );
+    while ( match.hasMatch() )
+    {
+      index = match.capturedStart();
+      styledata.remove( index, match.captured( 0 ).length() );
+      QString number = QString::number( match.captured( 0 ).toDouble() * Qgis::UI_SCALE_FACTOR );
+      styledata.insert( index, number );
+      index += number.length();
+      match = regex.match( styledata, index );
+    }
   }
 
-  QString styleSheet = QStringLiteral( "file:///" );
-  styleSheet.append( stylesheetname );
-  qApp->setStyleSheet( styleSheet );
+  qApp->setStyleSheet( styledata );
+
+  QFile palettefile( path + "/palette.txt" );
+  QFileInfo paletteInfo( palettefile );
+  if ( paletteInfo.exists() && palettefile.open( QIODevice::ReadOnly ) )
+  {
+    QPalette pal = qApp->palette();
+    QTextStream in( &palettefile );
+    while ( !in.atEnd() )
+    {
+      QString line = in.readLine();
+      QStringList parts = line.split( ':' );
+      if ( parts.count() == 2 )
+      {
+        int role = parts.at( 0 ).trimmed().toInt();
+        QColor color = QgsSymbolLayerUtils::decodeColor( parts.at( 1 ).trimmed() );
+        pal.setColor( static_cast< QPalette::ColorRole >( role ), color );
+      }
+    }
+    palettefile.close();
+    qApp->setPalette( pal );
+  }
+
   setThemeName( themeName );
 }
 
@@ -1444,7 +1473,7 @@ void QgsApplication::applyGdalSkippedDrivers()
 {
   ABISYM( mGdalSkipList ).removeDuplicates();
   QString myDriverList = ABISYM( mGdalSkipList ).join( QStringLiteral( " " ) );
-  QgsDebugMsg( "Gdal Skipped driver list set to:" );
+  QgsDebugMsg( QStringLiteral( "Gdal Skipped driver list set to:" ) );
   QgsDebugMsg( myDriverList );
   CPLSetConfigOption( "GDAL_SKIP", myDriverList.toUtf8() );
   GDALAllRegister(); //to update driver list and skip missing ones
@@ -1674,7 +1703,7 @@ bool QgsApplication::createDatabase( QString *errorMessage )
 
     if ( sqlite3_exec( database.get(), "DROP VIEW vw_srs", nullptr, nullptr, &errmsg ) != SQLITE_OK )
     {
-      QgsDebugMsg( QString( "vw_srs didn't exists in private qgis.db: %1" ).arg( errmsg ) );
+      QgsDebugMsg( QStringLiteral( "vw_srs didn't exists in private qgis.db: %1" ).arg( errmsg ) );
     }
 
     if ( sqlite3_exec( database.get(),
@@ -1706,7 +1735,7 @@ bool QgsApplication::createDatabase( QString *errorMessage )
 
 void QgsApplication::setMaxThreads( int maxThreads )
 {
-  QgsDebugMsg( QString( "maxThreads: %1" ).arg( maxThreads ) );
+  QgsDebugMsg( QStringLiteral( "maxThreads: %1" ).arg( maxThreads ) );
 
   // make sure value is between 1 and #cores, if not set to -1 (use #cores)
   // 0 could be used to disable any parallel processing
@@ -1722,7 +1751,7 @@ void QgsApplication::setMaxThreads( int maxThreads )
 
   // set max thread count in QThreadPool
   QThreadPool::globalInstance()->setMaxThreadCount( maxThreads );
-  QgsDebugMsg( QString( "set QThreadPool max thread count to %1" ).arg( QThreadPool::globalInstance()->maxThreadCount() ) );
+  QgsDebugMsg( QStringLiteral( "set QThreadPool max thread count to %1" ).arg( QThreadPool::globalInstance()->maxThreadCount() ) );
 }
 
 QgsTaskManager *QgsApplication::taskManager()

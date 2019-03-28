@@ -12,6 +12,7 @@ __copyright__ = 'Copyright 2016, The QGIS Project'
 # This will get replaced with a git SHA1 when you do a git archive
 __revision__ = '$Format:%H$'
 
+import os
 import qgis  # NOQA
 
 from qgis.PyQt.QtCore import QVariant
@@ -258,23 +259,81 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         # layer with default value expression
         layer.setDefaultValueDefinition(2, QgsDefaultValue('3*4'))
         f = QgsVectorLayerUtils.createFeature(layer)
-        self.assertEqual(f.attributes(), [NULL, NULL, 12.0])
-        # we expect the default value expression to take precedence over the attribute map
+        self.assertEqual(f.attributes(), [NULL, NULL, 12])
+        # we do not expect the default value expression to take precedence over the attribute map
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'a', 2: 6.0})
-        self.assertEqual(f.attributes(), ['a', NULL, 12.0])
+        self.assertEqual(f.attributes(), ['a', NULL, 6.0])
         # layer with default value expression based on geometry
         layer.setDefaultValueDefinition(2, QgsDefaultValue('3*$x'))
         f = QgsVectorLayerUtils.createFeature(layer, g)
+        #adjusted so that input value and output feature are the same
         self.assertEqual(f.attributes(), [NULL, NULL, 300.0])
         layer.setDefaultValueDefinition(2, QgsDefaultValue(None))
 
         # test with violated unique constraints
         layer.setFieldConstraint(1, QgsFieldConstraints.ConstraintUnique)
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
+        # since field 1 has Unique Constraint, it ignores value 123 that already has been set and sets to 128
         self.assertEqual(f.attributes(), ['test_1', 128, NULL])
         layer.setFieldConstraint(0, QgsFieldConstraints.ConstraintUnique)
+        # since field 0 and 1 already have values test_1 and 123, the output must be a new unique value
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
         self.assertEqual(f.attributes(), ['test_4', 128, NULL])
+
+        # test with violated unique constraints and default value expression providing unique value
+        layer.setDefaultValueDefinition(1, QgsDefaultValue('130'))
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
+        # since field 1 has Unique Constraint, it ignores value 123 that already has been set and adds the default value
+        self.assertEqual(f.attributes(), ['test_4', 130, NULL])
+        # fallback: test with violated unique constraints and default value expression providing already existing value
+        # add the feature with the default value:
+        self.assertTrue(layer.dataProvider().addFeatures([f]))
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
+        # since field 1 has Unique Constraint, it ignores value 123 that already has been set and adds the default value
+        # and since the default value providing an already existing value (130) it generates a unique value (next int: 131)
+        self.assertEqual(f.attributes(), ['test_5', 131, NULL])
+        layer.setDefaultValueDefinition(1, QgsDefaultValue(None))
+
+        # test with manually correct unique constraint
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 132})
+        self.assertEqual(f.attributes(), ['test_5', 132, NULL])
+
+        """ test creating a feature respecting unique values of postgres provider """
+        layer = QgsVectorLayer("Point?field=fldtxt:string&field=fldint:integer&field=flddbl:double",
+                               "addfeat", "memory")
+
+        # init connection string
+        dbconn = 'dbname=\'qgis_test\''
+        if 'QGIS_PGTEST_DB' in os.environ:
+            dbconn = os.environ['QGIS_PGTEST_DB']
+
+        # create a vector layer
+        pg_layer = QgsVectorLayer('{} table="qgis_test"."authors" sql='.format(dbconn), "authors", "postgres")
+        self.assertTrue(pg_layer.isValid())
+        # check the default clause
+        default_clause = 'nextval(\'qgis_test.authors_pk_seq\'::regclass)'
+        self.assertEqual(pg_layer.dataProvider().defaultValueClause(0), default_clause)
+
+        # though default_clause is after the first create not unique (until save), it should fill up all the features with it
+        pg_layer.startEditing()
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [default_clause, NULL])
+        self.assertTrue(pg_layer.addFeatures([f]))
+        self.assertTrue(QgsVectorLayerUtils.valueExists(pg_layer, 0, default_clause))
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [default_clause, NULL])
+        self.assertTrue(pg_layer.addFeatures([f]))
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [default_clause, NULL])
+        self.assertTrue(pg_layer.addFeatures([f]))
+        # if a unique value is passed, use it
+        f = QgsVectorLayerUtils.createFeature(pg_layer, attributes={0: 40, 1: NULL})
+        self.assertEqual(f.attributes(), [40, NULL])
+        # and if a default value is configured use it as well
+        pg_layer.setDefaultValueDefinition(0, QgsDefaultValue('11*4'))
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [44, NULL])
+        pg_layer.rollBack()
 
     def testDuplicateFeature(self):
         """ test duplicating a feature """

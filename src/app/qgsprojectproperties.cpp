@@ -850,7 +850,7 @@ QgsProjectProperties::QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *pa
 
   // sync metadata title and project title fields
   connect( mMetadataWidget, &QgsMetadataWidget::titleChanged, titleEdit, &QLineEdit::setText, Qt::QueuedConnection );
-  connect( titleEdit, &QLineEdit::textChanged, [ = ] { whileBlocking( mMetadataWidget )->setTitle( title() ) ;} );
+  connect( titleEdit, &QLineEdit::textChanged, this, [ = ] { whileBlocking( mMetadataWidget )->setTitle( title() ) ;} );
 
   //fill ts language checkbox
   QString i18nPath = QgsApplication::i18nPath();
@@ -877,6 +877,10 @@ QgsProjectProperties::QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *pa
   projectionSelectorInitialized();
   restoreOptionsBaseUi();
   restoreState();
+
+#ifdef QGISDEBUG
+  checkPageWidgetNameMap();
+#endif
 }
 
 QgsProjectProperties::~QgsProjectProperties()
@@ -906,13 +910,13 @@ void QgsProjectProperties::apply()
     QgsProject::instance()->setCrs( srs );
     if ( srs.isValid() )
     {
-      QgsDebugMsgLevel( QString( "Selected CRS " ) + srs.description(), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "Selected CRS " ) + srs.description(), 4 );
       // write the currently selected projections _proj string_ to project settings
-      QgsDebugMsgLevel( QString( "SpatialRefSys/ProjectCRSProj4String: %1" ).arg( srs.toProj4() ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "SpatialRefSys/ProjectCRSProj4String: %1" ).arg( srs.toProj4() ), 4 );
     }
     else
     {
-      QgsDebugMsgLevel( QString( "CRS set to no projection!" ), 4 );
+      QgsDebugMsgLevel( QStringLiteral( "CRS set to no projection!" ), 4 );
     }
 
     // mark selected projection for push to front
@@ -973,7 +977,7 @@ void QgsProjectProperties::apply()
     // If the user fields have changed, use them instead.
     if ( leSemiMajor->isModified() || leSemiMinor->isModified() )
     {
-      QgsDebugMsgLevel( "Using parameteric major/minor", 4 );
+      QgsDebugMsgLevel( QStringLiteral( "Using parameteric major/minor" ), 4 );
       major = QLocale().toDouble( leSemiMajor->text() );
       minor = QLocale().toDouble( leSemiMinor->text() );
     }
@@ -1006,7 +1010,8 @@ void QgsProjectProperties::apply()
     canvas->setSelectionColor( selectionColor );
     canvas->enableMapTileRendering( mMapTileRenderingCheckBox->isChecked() );
   }
-  QgisApp::instance()->mapOverviewCanvas()->setBackgroundColor( canvasColor );
+  if ( QgisApp::instance()->mapOverviewCanvas() )
+    QgisApp::instance()->mapOverviewCanvas()->setBackgroundColor( canvasColor );
 
   //save project scales
   QStringList myScales;
@@ -1069,10 +1074,7 @@ void QgsProjectProperties::apply()
 
   QgsProject::instance()->writeEntry( QStringLiteral( "WMSServiceCapabilities" ), QStringLiteral( "/" ), grpOWSServiceCapabilities->isChecked() );
   QgsProject::instance()->writeEntry( QStringLiteral( "WMSServiceTitle" ), QStringLiteral( "/" ), mWMSTitle->text() );
-
-  if ( !mWMSName->text().isEmpty() )
-    QgsProject::instance()->writeEntry( QStringLiteral( "WMSRootName" ), QStringLiteral( "/" ), mWMSName->text() );
-
+  QgsProject::instance()->writeEntry( QStringLiteral( "WMSRootName" ), QStringLiteral( "/" ), mWMSName->text() );
   QgsProject::instance()->writeEntry( QStringLiteral( "WMSContactOrganization" ), QStringLiteral( "/" ), mWMSContactOrganization->text() );
   QgsProject::instance()->writeEntry( QStringLiteral( "WMSContactPerson" ), QStringLiteral( "/" ), mWMSContactPerson->text() );
   QgsProject::instance()->writeEntry( QStringLiteral( "WMSContactMail" ), QStringLiteral( "/" ), mWMSContactMail->text() );
@@ -1391,7 +1393,8 @@ void QgsProjectProperties::apply()
   {
     canvas->refresh();
   }
-  QgisApp::instance()->mapOverviewCanvas()->refresh();
+  if ( QgisApp::instance()->mapOverviewCanvas() )
+    QgisApp::instance()->mapOverviewCanvas()->refresh();
 }
 
 void QgsProjectProperties::showProjectionsTab()
@@ -2084,16 +2087,19 @@ void QgsProjectProperties::checkOWS( QgsLayerTreeGroup *treeGroup, QStringList &
     {
       QgsLayerTreeLayer *treeLayer = static_cast<QgsLayerTreeLayer *>( treeNode );
       QgsMapLayer *l = treeLayer->layer();
-      QString shortName = l->shortName();
-      if ( shortName.isEmpty() )
-        owsNames << l->name();
-      else
-        owsNames << shortName;
-      if ( l->type() == QgsMapLayer::VectorLayer )
+      if ( l )
       {
-        QgsVectorLayer *vl = static_cast<QgsVectorLayer *>( l );
-        if ( vl->dataProvider()->encoding() == QLatin1String( "System" ) )
-          encodingMessages << tr( "Update layer \"%1\" encoding" ).arg( l->name() );
+        QString shortName = l->shortName();
+        if ( shortName.isEmpty() )
+          owsNames << l->name();
+        else
+          owsNames << shortName;
+        if ( l->type() == QgsMapLayer::VectorLayer )
+        {
+          QgsVectorLayer *vl = static_cast<QgsVectorLayer *>( l );
+          if ( vl->dataProvider()->encoding() == QLatin1String( "System" ) )
+            encodingMessages << tr( "Update layer \"%1\" encoding" ).arg( l->name() );
+        }
       }
     }
   }
@@ -2155,7 +2161,7 @@ void QgsProjectProperties::updateEllipsoidUI( int newIndex )
   // changing ellipsoid, save the modified coordinates
   if ( leSemiMajor->isModified() || leSemiMinor->isModified() )
   {
-    QgsDebugMsgLevel( "Saving major/minor", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Saving major/minor" ), 4 );
     mEllipsoidList[ mEllipsoidIndex ].semiMajor = QLocale().toDouble( leSemiMajor->text() );
     mEllipsoidList[ mEllipsoidIndex ].semiMinor = QLocale().toDouble( leSemiMinor->text() );
   }
@@ -2190,7 +2196,7 @@ void QgsProjectProperties::updateEllipsoidUI( int newIndex )
 
 void QgsProjectProperties::projectionSelectorInitialized()
 {
-  QgsDebugMsgLevel( "Setting up ellipsoid", 4 );
+  QgsDebugMsgLevel( QStringLiteral( "Setting up ellipsoid" ), 4 );
 
   // Reading ellipsoid from settings
   QStringList mySplitEllipsoid = QgsProject::instance()->ellipsoid().split( ':' );
@@ -2302,18 +2308,19 @@ void QgsProjectProperties::showHelp()
   QgsHelp::openHelp( link );
 }
 
-QMap< QString, QString > QgsProjectProperties::pageWidgetNameMap()
+void QgsProjectProperties::checkPageWidgetNameMap()
 {
-  QMap< QString, QString > pageNames;
+  const QMap< QString, QString > pageNames = QgisApp::instance()->projectPropertiesPagesMap();
+  Q_ASSERT_X( pageNames.count() == mOptionsListWidget->count(), "QgsProjectProperties::checkPageWidgetNameMap()", "QgisApp::projectPropertiesPagesMap() is outdated, contains too many entries" );
   for ( int idx = 0; idx < mOptionsListWidget->count(); ++idx )
   {
     QWidget *currentPage = mOptionsStackedWidget->widget( idx );
     QListWidgetItem *item = mOptionsListWidget->item( idx );
-    QString title = item->text();
-    QString name = currentPage->objectName();
-    pageNames.insert( title, name );
+    const QString title = item->text();
+    const QString name = currentPage->objectName();
+    Q_ASSERT_X( pageNames.contains( title ), "QgsProjectProperties::checkPageWidgetNameMap()", QStringLiteral( "QgisApp::projectPropertiesPagesMap() is outdated, please update. Missing %1" ).arg( title ).toLocal8Bit().constData() );
+    Q_ASSERT_X( pageNames.value( title ) == name, "QgsProjectProperties::checkPageWidgetNameMap()", QStringLiteral( "QgisApp::projectPropertiesPagesMap() is outdated, please update. %1 should be %2 not %3" ).arg( title, name, pageNames.value( title ) ).toLocal8Bit().constData() );
   }
-  return pageNames;
 }
 
 void QgsProjectProperties::setCurrentPage( const QString &pageWidgetName )

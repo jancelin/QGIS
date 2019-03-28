@@ -94,7 +94,10 @@ namespace QgsWms
                              const QString &version, const QgsServerRequest &request,
                              QgsServerResponse &response, bool projectSettings )
   {
-    QgsAccessControl *accessControl = serverIface->accessControls();
+    QgsAccessControl *accessControl = nullptr;
+#ifdef HAVE_SERVER_PYTHON_PLUGINS
+    accessControl = serverIface->accessControls();
+#endif
 
     QDomDocument doc;
     const QDomDocument *capabilitiesDocument = nullptr;
@@ -110,7 +113,10 @@ namespace QgsWms
       cache = accessControl->fillCacheKey( cacheKeyList );
     QString cacheKey = cacheKeyList.join( '-' );
 
-    QgsServerCacheManager *cacheManager = serverIface->cacheManager();
+    QgsServerCacheManager *cacheManager = nullptr;
+#ifdef HAVE_SERVER_PYTHON_PLUGINS
+    cacheManager = serverIface->cacheManager();
+#endif
     if ( cacheManager && cacheManager->getCachedDocument( &doc, project, request, accessControl ) )
     {
       capabilitiesDocument = &doc;
@@ -201,7 +207,6 @@ namespace QgsWms
       schemaLocation += QLatin1String( " http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd" );
       schemaLocation += QLatin1String( " http://www.opengis.net/sld" );
       schemaLocation += QLatin1String( " http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd" );
-      schemaLocation += QLatin1String( " http://www.qgis.org/wms" );
       if ( QgsServerProjectUtils::wmsInspireActivate( *project ) )
       {
         wmsCapabilitiesElement.setAttribute( QStringLiteral( "xmlns:inspire_common" ), QStringLiteral( "http://inspire.ec.europa.eu/schemas/common/1.0" ) );
@@ -1011,7 +1016,24 @@ namespace QgsWms
             appendCrsElementsToLayer( doc, layerElem, crsList, outputCrsList );
 
             //Ex_GeographicBoundingBox
-            appendLayerBoundingBoxes( doc, layerElem, l->extent(), l->crs(), crsList, outputCrsList, project );
+            QgsRectangle extent = l->extent();  // layer extent by default
+            if ( l->type() == QgsMapLayer::VectorLayer )
+            {
+              QgsVectorLayer *vl = qobject_cast<QgsVectorLayer *>( l );
+              if ( vl && vl->featureCount() == 0 )
+              {
+                // if there's no feature, use the wms extent defined in the
+                // project...
+                extent = QgsServerProjectUtils::wmsExtent( *project );
+                if ( extent.isNull() )
+                {
+                  // or the CRS extent otherwise
+                  extent = vl->crs().bounds();
+                }
+              }
+            }
+
+            appendLayerBoundingBoxes( doc, layerElem, extent, l->crs(), crsList, outputCrsList, project );
           }
 
           // add details about supported styles of the layer

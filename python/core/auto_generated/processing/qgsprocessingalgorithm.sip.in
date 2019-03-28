@@ -45,6 +45,7 @@ Abstract base class for processing algorithms.
       FlagNoThreading,
       FlagDisplayNameIsLiteral,
       FlagSupportsInPlaceEdits,
+      FlagKnownIssues,
       FlagDeprecated,
     };
     typedef QFlags<QgsProcessingAlgorithm::Flag> Flags;
@@ -63,7 +64,7 @@ a pre-initialized copy of the algorithm.
 
 
 
-    QgsProcessingAlgorithm *create( const QVariantMap &configuration = QVariantMap() ) const /TransferBack/;
+    QgsProcessingAlgorithm *create( const QVariantMap &configuration = QVariantMap() ) const throw( QgsProcessingException ) /TransferBack/;
 %Docstring
 Creates a copy of the algorithm, ready for execution.
 
@@ -75,6 +76,9 @@ to the algorithm, allowing it to dynamically adjust its initialized parameters
 and outputs according to this configuration. This is generally used only for
 algorithms in a model, allowing them to adjust their behavior at run time
 according to some user configuration.
+
+Raises a QgsProcessingException if a new algorithm instance could not be created,
+e.g. if there is an issue with the subclass' createInstance() method.
 
 .. seealso:: :py:func:`initAlgorithm`
 %End
@@ -401,7 +405,7 @@ Associates this algorithm with its provider. No transfer of ownership is involve
 
   protected:
 
-    virtual QgsProcessingAlgorithm *createInstance() const = 0 /Factory/;
+    virtual QgsProcessingAlgorithm *createInstance() const = 0 /Factory,VirtualErrorHandler=processing_exception_handler/;
 %Docstring
 Creates a new instance of the algorithm class.
 
@@ -611,7 +615,7 @@ Evaluates the parameter with matching ``name`` to a static boolean value.
 %End
 
     QgsFeatureSink *parameterAsSink( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context, QString &destinationIdentifier /Out/,
-                                     const QgsFields &fields, QgsWkbTypes::Type geometryType = QgsWkbTypes::NoGeometry, const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem() ) const /Factory/;
+                                     const QgsFields &fields, QgsWkbTypes::Type geometryType = QgsWkbTypes::NoGeometry, const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem(), QgsFeatureSink::SinkFlags sinkFlags = 0 ) const /Factory/;
 %Docstring
 Evaluates the parameter with matching ``name`` to a feature sink.
 
@@ -885,7 +889,7 @@ will be added to the algorithm's output. This allows for "explode" type algorith
 input feature results in multiple output features.
 
 The provided ``feedback`` object can be used to push messages to the log and for giving feedback
-to users. Note that handling of progress reports and algorithm cancelation is handled by
+to users. Note that handling of progress reports and algorithm cancellation is handled by
 the base class and subclasses do not need to reimplement this logic.
 
 Algorithms can throw a QgsProcessingException if a fatal error occurred which should
@@ -922,6 +926,13 @@ this is possible to determine in advance.
     virtual QgsProcessingFeatureSource::Flag sourceFlags() const;
 %Docstring
 Returns the processing feature source flags to be used in the algorithm.
+%End
+
+    virtual QgsFeatureSink::SinkFlags sinkFlags() const;
+%Docstring
+Returns the feature sink flags to be used for the output.
+
+.. versionadded:: 3.4.1
 %End
 
     virtual QgsWkbTypes::Type outputWkbType( QgsWkbTypes::Type inputWkbType ) const;

@@ -79,7 +79,7 @@ files=
 if [ -d "$2" ]; then
 	builddir=$(realpath $2)
 	textcpp=
-	for i in $builddir/src/core/qgsexpression_texts.cpp; do
+	for i in $builddir/src/core/qgsexpression_texts.cpp $builddir/src/core/qgsexpressionparser.cpp; do
 		if [ -f $i ]; then
 			textcpp="$textcpp $i"
 		elif [ "$action" != "pull" ]; then
@@ -175,9 +175,9 @@ $QMAKE -project -o qgis_ts.pro -nopwd $PWD/src $PWD/python $PWD/i18n $textcpp
 echo "TR_EXCLUDE = $(qmake -query QT_INSTALL_HEADERS)/*" >>qgis_ts.pro
 
 echo Updating translations
-$LUPDATE -locations absolute -verbose qgis_ts.pro
+$LUPDATE -no-obsolete -locations absolute -verbose qgis_ts.pro
 
-perl -i.bak -ne 'print unless /^\s+<location.*qgs(expression|contexthelp)_texts\.cpp.*$/;' i18n/qgis_*.ts
+perl -i.bak -ne 'print unless /^\s+<location.*(qgs(expression|contexthelp)_texts|.*-i18n)\.cpp.*$/;' i18n/qgis_*.ts
 
 if [ $action = push ]; then
 	cp i18n/qgis_en.ts /tmp/qgis_en.ts-uploading

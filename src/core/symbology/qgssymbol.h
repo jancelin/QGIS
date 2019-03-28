@@ -21,8 +21,6 @@
 #include <QList>
 #include <QMap>
 #include "qgsmapunitscale.h"
-#include "qgspoint.h"
-#include "qgsfeature.h"
 #include "qgsfields.h"
 #include "qgsrendercontext.h"
 #include "qgsproperty.h"
@@ -33,10 +31,8 @@ class QPainter;
 class QSize;
 class QPointF;
 class QPolygonF;
-
 class QDomDocument;
 class QDomElement;
-//class
 
 class QgsFields;
 class QgsSymbolLayer;
@@ -47,10 +43,12 @@ class QgsMarkerSymbolLayer;
 class QgsLineSymbolLayer;
 class QgsFillSymbolLayer;
 class QgsSymbolRenderContext;
+class QgsFeature;
 class QgsFeatureRenderer;
 class QgsCurve;
 class QgsPolygon;
 class QgsExpressionContext;
+class QgsPoint;
 
 typedef QList<QgsSymbolLayer *> QgsSymbolLayerList;
 
@@ -382,6 +380,28 @@ class CORE_EXPORT QgsSymbol
     bool clipFeaturesToExtent() const { return mClipFeaturesToExtent; }
 
     /**
+     * Sets whether polygon features drawn by the symbol should be reoriented to follow the
+     * standard right-hand-rule orientation, in which the area that is
+     * bounded by the polygon is to the right of the boundary. In particular, the exterior
+     * ring is oriented in a clockwise direction and the interior rings in a counter-clockwise
+     * direction.
+     * \see forceRHR()
+     * \since QGIS 3.4.3
+     */
+    void setForceRHR( bool force ) { mForceRHR = force; }
+
+    /**
+     * Returns true if polygon features drawn by the symbol will be reoriented to follow the
+     * standard right-hand-rule orientation, in which the area that is
+     * bounded by the polygon is to the right of the boundary. In particular, the exterior
+     * ring is oriented in a clockwise direction and the interior rings in a counter-clockwise
+     * direction.
+     * \see setForceRHR()
+     * \since QGIS 3.4.3
+     */
+    bool forceRHR() const { return mForceRHR; }
+
+    /**
      * Returns a list of attributes required to render this feature.
      * This should include any attributes required by the symbology including
      * the ones required by expressions.
@@ -409,7 +429,7 @@ class CORE_EXPORT QgsSymbol
      * Render a feature. Before calling this the startRender() method should be called to initialize
      * the rendering process. After rendering all features stopRender() must be called.
      */
-    void renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false, int currentVertexMarkerType = 0, int currentVertexMarkerSize = 0 );
+    void renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false, int currentVertexMarkerType = 0, double currentVertexMarkerSize = 0.0 );
 
     /**
      * Returns the symbol render context. Only valid between startRender and stopRender calls.
@@ -449,14 +469,21 @@ class CORE_EXPORT QgsSymbol
     static QPolygonF _getLineString( QgsRenderContext &context, const QgsCurve &curve, bool clipToExtent = true );
 
     /**
-     * Creates a polygon ring in screen coordinates from a QgsCurve in map coordinates
+     * Creates a polygon ring in screen coordinates from a QgsCurve in map coordinates.
+     *
+     * If \a correctRingOrientation is true then the ring will be oriented to match standard ring orientation, e.g.
+     * clockwise for exterior rings and counter-clockwise for interior rings.
      */
-    static QPolygonF _getPolygonRing( QgsRenderContext &context, const QgsCurve &curve, bool clipToExtent );
+    static QPolygonF _getPolygonRing( QgsRenderContext &context, const QgsCurve &curve, bool clipToExtent, bool isExteriorRing = false, bool correctRingOrientation = false );
 
     /**
      * Creates a polygon in screen coordinates from a QgsPolygonXYin map coordinates
+     *
+     * If \a correctRingOrientation is true then the ring will be oriented to match standard ring orientation, e.g.
+     * clockwise for exterior rings and counter-clockwise for interior rings.
+     *
      */
-    static void _getPolygon( QPolygonF &pts, QList<QPolygonF> &holes, QgsRenderContext &context, const QgsPolygon &polygon, bool clipToExtent = true );
+    static void _getPolygon( QPolygonF &pts, QList<QPolygonF> &holes, QgsRenderContext &context, const QgsPolygon &polygon, bool clipToExtent = true, bool correctRingOrientation = false );
 
     /**
      * Retrieve a cloned list of all layers that make up this symbol.
@@ -479,7 +506,7 @@ class CORE_EXPORT QgsSymbol
      * Render editing vertex marker at specified point
      * \since QGIS 2.16
      */
-    void renderVertexMarker( QPointF pt, QgsRenderContext &context, int currentVertexMarkerType, int currentVertexMarkerSize );
+    void renderVertexMarker( QPointF pt, QgsRenderContext &context, int currentVertexMarkerType, double currentVertexMarkerSize );
 
     SymbolType mType;
     QgsSymbolLayerList mLayers;
@@ -489,6 +516,7 @@ class CORE_EXPORT QgsSymbol
 
     RenderHints mRenderHints = nullptr;
     bool mClipFeaturesToExtent = true;
+    bool mForceRHR = false;
 
     Q_DECL_DEPRECATED const QgsVectorLayer *mLayer = nullptr; //current vectorlayer
 
@@ -698,6 +726,8 @@ class CORE_EXPORT QgsSymbolRenderContext
 /**
  * \ingroup core
  * \class QgsMarkerSymbol
+ *
+ * A marker symbol type, for rendering Point and MultiPoint geometries.
  */
 class CORE_EXPORT QgsMarkerSymbol : public QgsSymbol
 {
@@ -709,6 +739,11 @@ class CORE_EXPORT QgsMarkerSymbol : public QgsSymbol
      */
     static QgsMarkerSymbol *createSimple( const QgsStringMap &properties ) SIP_FACTORY;
 
+    /**
+     * Constructor for QgsMarkerSymbol, with the specified list of initial symbol \a layers.
+     *
+     * Ownership of the \a layers are transferred to the symbol.
+     */
     QgsMarkerSymbol( const QgsSymbolLayerList &layers SIP_TRANSFER = QgsSymbolLayerList() );
 
     /**
@@ -764,13 +799,33 @@ class CORE_EXPORT QgsMarkerSymbol : public QgsSymbol
     void setSize( double size );
 
     /**
-     * Returns the size for the whole symbol, which is the maximum size of
+     * Returns the estimated size for the whole symbol, which is the maximum size of
      * all marker symbol layers in the symbol.
+     *
+     * \warning This returned value is inaccurate if the symbol consists of multiple
+     * symbol layers with different size units. Use the overload accepting a QgsRenderContext
+     * argument instead for accurate sizes in this case.
+     *
      * \see setSize()
      * \see sizeUnit()
      * \see sizeMapUnitScale()
      */
     double size() const;
+
+    /**
+     * Returns the symbol size, in painter units. This is the maximum size of
+     * all marker symbol layers in the symbol.
+     *
+     * This method returns an accurate size by calculating the actual rendered
+     * size of each symbol layer using the provided render \a context.
+     *
+     * \see setSize()
+     * \see sizeUnit()
+     * \see sizeMapUnitScale()
+     *
+     * \since QGIS 3.4.5
+     */
+    double size( const QgsRenderContext &context ) const;
 
     /**
      * Sets the size units for the whole symbol (including all symbol layers).
@@ -859,6 +914,8 @@ class CORE_EXPORT QgsMarkerSymbol : public QgsSymbol
 /**
  * \ingroup core
  * \class QgsLineSymbol
+ *
+ * A line symbol type, for rendering LineString and MultiLineString geometries.
  */
 class CORE_EXPORT QgsLineSymbol : public QgsSymbol
 {
@@ -870,10 +927,45 @@ class CORE_EXPORT QgsLineSymbol : public QgsSymbol
      */
     static QgsLineSymbol *createSimple( const QgsStringMap &properties ) SIP_FACTORY;
 
+    /**
+     * Constructor for QgsLineSymbol, with the specified list of initial symbol \a layers.
+     *
+     * Ownership of the \a layers are transferred to the symbol.
+     */
     QgsLineSymbol( const QgsSymbolLayerList &layers SIP_TRANSFER = QgsSymbolLayerList() );
 
+    /**
+     * Sets the \a width for the whole line symbol. Individual symbol layer sizes
+     * will be scaled to maintain their current relative size to the whole symbol size.
+     *
+     * \see width()
+     */
     void setWidth( double width );
+
+    /**
+     * Returns the estimated width for the whole symbol, which is the maximum width of
+     * all marker symbol layers in the symbol.
+     *
+     * \warning This returned value is inaccurate if the symbol consists of multiple
+     * symbol layers with different width units. Use the overload accepting a QgsRenderContext
+     * argument instead for accurate sizes in this case.
+     *
+     * \see setWidth()
+     */
     double width() const;
+
+    /**
+     * Returns the symbol width, in painter units. This is the maximum width of
+     * all marker symbol layers in the symbol.
+     *
+     * This method returns an accurate width by calculating the actual rendered
+     * width of each symbol layer using the provided render \a context.
+     *
+     * \see setWidth()
+     *
+     * \since QGIS 3.4.5
+     */
+    double width( const QgsRenderContext &context ) const;
 
     /**
      * Set data defined width for whole symbol (including all symbol layers).
@@ -905,6 +997,8 @@ class CORE_EXPORT QgsLineSymbol : public QgsSymbol
 /**
  * \ingroup core
  * \class QgsFillSymbol
+ *
+ * A fill symbol type, for rendering Polygon and MultiPolygon geometries.
  */
 class CORE_EXPORT QgsFillSymbol : public QgsSymbol
 {
@@ -916,6 +1010,11 @@ class CORE_EXPORT QgsFillSymbol : public QgsSymbol
      */
     static QgsFillSymbol *createSimple( const QgsStringMap &properties ) SIP_FACTORY;
 
+    /**
+     * Constructor for QgsFillSymbol, with the specified list of initial symbol \a layers.
+     *
+     * Ownership of the \a layers are transferred to the symbol.
+     */
     QgsFillSymbol( const QgsSymbolLayerList &layers SIP_TRANSFER = QgsSymbolLayerList() );
     void setAngle( double angle );
     void renderPolygon( const QPolygonF &points, QList<QPolygonF> *rings, const QgsFeature *f, QgsRenderContext &context, int layer = -1, bool selected = false );

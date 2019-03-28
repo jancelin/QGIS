@@ -385,27 +385,7 @@ class DummyProviderNoLoad : public DummyProvider
 
 };
 
-class DummyProvider3 : public QgsProcessingProvider
-{
-  public:
 
-    DummyProvider3()  = default;
-    QString id() const override { return QStringLiteral( "dummy3" ); }
-    QString name() const override { return QStringLiteral( "dummy3" ); }
-
-    QStringList supportedOutputVectorLayerExtensions() const override
-    {
-      return QStringList() << QStringLiteral( "mif" ) << QStringLiteral( "tab" );
-    }
-
-    QStringList supportedOutputRasterLayerExtensions() const override
-    {
-      return QStringList() << QStringLiteral( "mig" ) << QStringLiteral( "asc" );
-    }
-
-    void loadAlgorithms() override {}
-
-};
 
 class DummyAlgorithm2 : public QgsProcessingAlgorithm
 {
@@ -432,6 +412,36 @@ class DummyAlgorithm2 : public QgsProcessingAlgorithm
 
 };
 
+
+class DummyProvider3 : public QgsProcessingProvider
+{
+  public:
+
+    DummyProvider3()  = default;
+    QString id() const override { return QStringLiteral( "dummy3" ); }
+    QString name() const override { return QStringLiteral( "dummy3" ); }
+
+    QStringList supportedOutputVectorLayerExtensions() const override
+    {
+      return QStringList() << QStringLiteral( "mif" ) << QStringLiteral( "tab" );
+    }
+
+    QStringList supportedOutputTableExtensions() const override
+    {
+      return QStringList() << QStringLiteral( "dbf" );
+    }
+
+    QStringList supportedOutputRasterLayerExtensions() const override
+    {
+      return QStringList() << QStringLiteral( "mig" ) << QStringLiteral( "asc" );
+    }
+
+    void loadAlgorithms() override
+    {
+      QVERIFY( addAlgorithm( new DummyAlgorithm2( "alg1" ) ) );
+    }
+
+};
 
 class DummyProvider4 : public QgsProcessingProvider
 {
@@ -564,6 +574,7 @@ class TestQgsProcessing: public QObject
     void indicesToFields();
     void stringToPythonLiteral();
     void defaultExtensionsForProvider();
+    void supportedExtensions();
     void supportsNonFileBasedOutput();
     void addParameterType();
     void removeParameterType();
@@ -1475,59 +1486,66 @@ void TestQgsProcessing::parseDestinationString()
   QString layerName;
   QString format;
   QVariantMap options;
+  QString extension;
   bool useWriter = false;
 
   // simple shapefile output
   QString destination = QStringLiteral( "d:/test.shp" );
-  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
   QCOMPARE( destination, QStringLiteral( "d:/test.shp" ) );
   QCOMPARE( providerKey, QStringLiteral( "ogr" ) );
   QCOMPARE( uri, QStringLiteral( "d:/test.shp" ) );
   QCOMPARE( format, QStringLiteral( "ESRI Shapefile" ) );
+  QCOMPARE( extension, QStringLiteral( "shp" ) );
   QVERIFY( useWriter );
 
   // postgis output
   destination = QStringLiteral( "postgis:dbname='db' host=DBHOST port=5432 table=\"calcs\".\"output\" (geom) sql=" );
-  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
   QCOMPARE( providerKey, QStringLiteral( "postgres" ) );
   QCOMPARE( uri, QStringLiteral( "dbname='db' host=DBHOST port=5432 table=\"calcs\".\"output\" (geom) sql=" ) );
   QVERIFY( !useWriter );
+  QVERIFY( extension.isEmpty() );
   // postgres key should also work
   destination = QStringLiteral( "postgres:dbname='db' host=DBHOST port=5432 table=\"calcs\".\"output\" (geom) sql=" );
-  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
   QCOMPARE( providerKey, QStringLiteral( "postgres" ) );
   QCOMPARE( uri, QStringLiteral( "dbname='db' host=DBHOST port=5432 table=\"calcs\".\"output\" (geom) sql=" ) );
   QVERIFY( !useWriter );
+  QVERIFY( extension.isEmpty() );
 
   // full uri shp output
   options.clear();
   destination = QStringLiteral( "ogr:d:/test.shp" );
-  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
   QCOMPARE( providerKey, QStringLiteral( "ogr" ) );
   QCOMPARE( uri, QStringLiteral( "d:/test.shp" ) );
   QCOMPARE( options.value( QStringLiteral( "update" ) ).toBool(), true );
   QVERIFY( !options.contains( QStringLiteral( "layerName" ) ) );
   QVERIFY( !useWriter );
+  QCOMPARE( extension, QStringLiteral( "shp" ) );
 
 // full uri geopackage output
   options.clear();
   destination = QStringLiteral( "ogr:d:/test.gpkg" );
-  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
   QCOMPARE( providerKey, QStringLiteral( "ogr" ) );
   QCOMPARE( uri, QStringLiteral( "d:/test.gpkg" ) );
   QCOMPARE( options.value( QStringLiteral( "update" ) ).toBool(), true );
   QVERIFY( !options.contains( QStringLiteral( "layerName" ) ) );
   QVERIFY( !useWriter );
+  QCOMPARE( extension, QStringLiteral( "gpkg" ) );
 
 // full uri geopackage table output with layer name
   options.clear();
   destination = QStringLiteral( "ogr:dbname='d:/package.gpkg' table=\"mylayer\" (geom) sql=" );
-  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter );
+  QgsProcessingUtils::parseDestinationString( destination, providerKey, uri, layerName, format, options, useWriter, extension );
   QCOMPARE( providerKey, QStringLiteral( "ogr" ) );
   QCOMPARE( uri, QStringLiteral( "d:/package.gpkg" ) );
   QCOMPARE( options.value( QStringLiteral( "update" ) ).toBool(), true );
   QCOMPARE( options.value( QStringLiteral( "layerName" ) ).toString(), QStringLiteral( "mylayer" ) );
   QVERIFY( !useWriter );
+  QCOMPARE( extension, QStringLiteral( "gpkg" ) );
 }
 
 void TestQgsProcessing::createFeatureSink()
@@ -3066,6 +3084,13 @@ void TestQgsProcessing::parameterLayerList()
   QCOMPARE( layers.at( 0 ), v1 );
   QCOMPARE( layers.at( 1 )->publicSource(), raster2 );
 
+  // mix of existing layer and ID (and check we keep order)
+  params.insert( "non_optional",  QVariantList() << QVariant::fromValue( v1 ) << v2->id() );
+  QCOMPARE( QgsProcessingParameters::parameterAsLayerList( def.get(), params, context ), QList< QgsMapLayer *>() << v1 << v2 );
+
+  params.insert( "non_optional",  QVariantList() << v1->id() << QVariant::fromValue( v2 ) );
+  QCOMPARE( QgsProcessingParameters::parameterAsLayerList( def.get(), params, context ), QList< QgsMapLayer *>() << v1 << v2 );
+
   // empty string
   params.insert( "non_optional",  QString( "" ) );
   QVERIFY( QgsProcessingParameters::parameterAsLayerList( def.get(), params, context ).isEmpty() );
@@ -3233,6 +3258,13 @@ void TestQgsProcessing::parameterDistance()
   std::unique_ptr< QgsProcessingParameterDistance > def( new QgsProcessingParameterDistance( "non_optional", QString(), 5, QStringLiteral( "parent" ), false ) );
   QCOMPARE( def->parentParameterName(), QStringLiteral( "parent" ) );
   def->setParentParameterName( QStringLiteral( "parent2" ) );
+  QCOMPARE( def->defaultUnit(), QgsUnitTypes::DistanceUnknownUnit );
+  def->setDefaultUnit( QgsUnitTypes::DistanceFeet );
+  QCOMPARE( def->defaultUnit(), QgsUnitTypes::DistanceFeet );
+  std::unique_ptr< QgsProcessingParameterDistance > clone( def->clone() );
+  QCOMPARE( clone->parentParameterName(), QStringLiteral( "parent2" ) );
+  QCOMPARE( clone->defaultUnit(), QgsUnitTypes::DistanceFeet );
+
   QCOMPARE( def->parentParameterName(), QStringLiteral( "parent2" ) );
   QVERIFY( def->checkValueIsAcceptable( 5 ) );
   QVERIFY( def->checkValueIsAcceptable( "1.1" ) );
@@ -3290,6 +3322,7 @@ void TestQgsProcessing::parameterDistance()
   QCOMPARE( fromMap.maximum(), def->maximum() );
   QCOMPARE( fromMap.dataType(), def->dataType() );
   QCOMPARE( fromMap.parentParameterName(), QStringLiteral( "parent2" ) );
+  QCOMPARE( fromMap.defaultUnit(), QgsUnitTypes::DistanceFeet );
   def.reset( dynamic_cast< QgsProcessingParameterDistance *>( QgsProcessingParameters::parameterFromVariantMap( map ) ) );
   QVERIFY( dynamic_cast< QgsProcessingParameterDistance *>( def.get() ) );
 
@@ -4658,7 +4691,7 @@ void TestQgsProcessing::parameterFeatureSink()
   QVERIFY( QgsProcessingParameterFeatureSink( "test", QString(), QgsProcessing::TypeVectorPolygon ).hasGeometry() );
   QVERIFY( !QgsProcessingParameterFeatureSink( "test", QString(), QgsProcessing::TypeRaster ).hasGeometry() );
   QVERIFY( !QgsProcessingParameterFeatureSink( "test", QString(), QgsProcessing::TypeFile ).hasGeometry() );
-  QVERIFY( QgsProcessingParameterFeatureSink( "test", QString(), QgsProcessing::TypeVector ).hasGeometry() );
+  QVERIFY( !QgsProcessingParameterFeatureSink( "test", QString(), QgsProcessing::TypeVector ).hasGeometry() );
 
   // invalidSinkError
   QVariantMap params;
@@ -4671,6 +4704,30 @@ void TestQgsProcessing::parameterFeatureSink()
   QCOMPARE( QgsProcessingAlgorithm::invalidSinkError( params, QStringLiteral( "OUTPUT" ) ), QStringLiteral( "Could not create destination layer for OUTPUT: d:/test3.shp" ) );
   params.insert( QStringLiteral( "OUTPUT" ), QgsProcessingFeatureSourceDefinition( QStringLiteral( "source" ) ) );
   QCOMPARE( QgsProcessingAlgorithm::invalidSinkError( params, QStringLiteral( "OUTPUT" ) ), QStringLiteral( "Could not create destination layer for OUTPUT: invalid value" ) );
+
+  // test supported output vector layer extensions
+
+  def.reset( new QgsProcessingParameterFeatureSink( "with_geom", QString(), QgsProcessing::TypeVectorAnyGeometry, QString(), true ) );
+  DummyProvider3 provider;
+  provider.loadAlgorithms();
+  def->mOriginalProvider = &provider;
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 2 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "mif" ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 1 ), QStringLiteral( "tab" ) );
+  def->mOriginalProvider = nullptr;
+  def->mAlgorithm = const_cast< QgsProcessingAlgorithm * >( provider.algorithms().at( 0 ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 2 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "mif" ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 1 ), QStringLiteral( "tab" ) );
+
+  def.reset( new QgsProcessingParameterFeatureSink( "no_geom", QString(), QgsProcessing::TypeVector, QString(), true ) );
+  def->mOriginalProvider = &provider;
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 1 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "dbf" ) );
+  def->mOriginalProvider = nullptr;
+  def->mAlgorithm = const_cast< QgsProcessingAlgorithm * >( provider.algorithms().at( 0 ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 1 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "dbf" ) );
 }
 
 void TestQgsProcessing::parameterVectorOut()
@@ -4776,7 +4833,7 @@ void TestQgsProcessing::parameterVectorOut()
   QVERIFY( QgsProcessingParameterVectorDestination( "test", QString(), QgsProcessing::TypeVectorPolygon ).hasGeometry() );
   QVERIFY( !QgsProcessingParameterVectorDestination( "test", QString(), QgsProcessing::TypeRaster ).hasGeometry() );
   QVERIFY( !QgsProcessingParameterVectorDestination( "test", QString(), QgsProcessing::TypeFile ).hasGeometry() );
-  QVERIFY( QgsProcessingParameterVectorDestination( "test", QString(), QgsProcessing::TypeVector ).hasGeometry() );
+  QVERIFY( !QgsProcessingParameterVectorDestination( "test", QString(), QgsProcessing::TypeVector ).hasGeometry() );
 
   // test layers to load on completion
   def.reset( new QgsProcessingParameterVectorDestination( "x", QStringLiteral( "desc" ), QgsProcessing::TypeVectorAnyGeometry, QString(), true ) );
@@ -4804,6 +4861,45 @@ void TestQgsProcessing::parameterVectorOut()
   QCOMPARE( context2.layersToLoadOnCompletion().values().at( 0 ).name, QStringLiteral( "my_dest" ) );
   QCOMPARE( context2.layersToLoadOnCompletion().values().at( 0 ).outputName, QStringLiteral( "x" ) );
   QCOMPARE( context2.layersToLoadOnCompletion().values().at( 0 ).layerTypeHint, QgsProcessingUtils::Vector );
+
+  // test supported output vector layer extensions
+
+  def.reset( new QgsProcessingParameterVectorDestination( "with_geom", QString(), QgsProcessing::TypeVectorAnyGeometry, QString(), true ) );
+  DummyProvider3 provider;
+  QString error;
+  QVERIFY( provider.isSupportedOutputValue( QVariant(), def.get(), context, error ) ); // optional
+  QVERIFY( provider.isSupportedOutputValue( QString(), def.get(), context, error ) ); // optional
+  QVERIFY( !provider.isSupportedOutputValue( "d:/test.shp", def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( "d:/test.SHP", def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( "ogr:d:/test.shp", def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( QgsProcessingOutputLayerDefinition( "d:/test.SHP" ), def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( "d:/test.mif", def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( "d:/test.MIF", def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( "ogr:d:/test.MIF", def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( QgsProcessingOutputLayerDefinition( "d:/test.MIF" ), def.get(), context, error ) );
+  def.reset( new QgsProcessingParameterVectorDestination( "with_geom", QString(), QgsProcessing::TypeVectorAnyGeometry, QString(), false ) );
+  QVERIFY( !provider.isSupportedOutputValue( QVariant(), def.get(), context, error ) ); // non-optional
+  QVERIFY( !provider.isSupportedOutputValue( QString(), def.get(), context, error ) ); // non-optional
+
+  provider.loadAlgorithms();
+  def->mOriginalProvider = &provider;
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 2 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "mif" ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 1 ), QStringLiteral( "tab" ) );
+  def->mOriginalProvider = nullptr;
+  def->mAlgorithm = const_cast< QgsProcessingAlgorithm * >( provider.algorithms().at( 0 ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 2 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "mif" ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 1 ), QStringLiteral( "tab" ) );
+
+  def.reset( new QgsProcessingParameterVectorDestination( "no_geom", QString(), QgsProcessing::TypeVector, QString(), true ) );
+  def->mOriginalProvider = &provider;
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 1 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "dbf" ) );
+  def->mOriginalProvider = nullptr;
+  def->mAlgorithm = const_cast< QgsProcessingAlgorithm * >( provider.algorithms().at( 0 ) );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().count(), 1 );
+  QCOMPARE( def->supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "dbf" ) );
 }
 
 void TestQgsProcessing::parameterRasterOut()
@@ -4892,6 +4988,17 @@ void TestQgsProcessing::parameterRasterOut()
   QCOMPARE( fromCode->description(), QStringLiteral( "optional" ) );
   QCOMPARE( fromCode->flags(), def->flags() );
   QCOMPARE( fromCode->defaultValue(), def->defaultValue() );
+
+  DummyProvider3 provider;
+  QString error;
+  QVERIFY( !provider.isSupportedOutputValue( QVariant(), def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( QString(), def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( "d:/test.tif", def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( "d:/test.TIF", def.get(), context, error ) );
+  QVERIFY( !provider.isSupportedOutputValue( QgsProcessingOutputLayerDefinition( "d:/test.tif" ), def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( "d:/test.mig", def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( "d:/test.MIG", def.get(), context, error ) );
+  QVERIFY( provider.isSupportedOutputValue( QgsProcessingOutputLayerDefinition( "d:/test.MIG" ), def.get(), context, error ) );
 
   // test layers to load on completion
   def.reset( new QgsProcessingParameterRasterDestination( "x", QStringLiteral( "desc" ), QStringLiteral( "default.tif" ), true ) );
@@ -5301,7 +5408,7 @@ void TestQgsProcessing::processingFeatureSource()
   QgsFeature f2;
   QVERIFY( source.get() );
   QVERIFY( source->getFeatures().nextFeature( f2 ) );
-  QCOMPARE( f2.geometry(), f.geometry() );
+  QCOMPARE( f2.geometry().asWkt(), f.geometry().asWkt() );
 
   // direct map layer
   params.insert( QStringLiteral( "layer" ), QVariant::fromValue( layer ) );
@@ -5309,7 +5416,7 @@ void TestQgsProcessing::processingFeatureSource()
   // can't directly match it to layer, so instead just get the feature and test that it matches what we expect
   QVERIFY( source.get() );
   QVERIFY( source->getFeatures().nextFeature( f2 ) );
-  QCOMPARE( f2.geometry(), f.geometry() );
+  QCOMPARE( f2.geometry().asWkt(), f.geometry().asWkt() );
 
   // next using property based definition
   params.insert( QStringLiteral( "layer" ), QgsProcessingFeatureSourceDefinition( QgsProperty::fromExpression( QStringLiteral( "trim('%1' + ' ')" ).arg( layer->id() ) ), false ) );
@@ -5317,7 +5424,7 @@ void TestQgsProcessing::processingFeatureSource()
   // can't directly match it to layer, so instead just get the feature and test that it matches what we expect
   QVERIFY( source.get() );
   QVERIFY( source->getFeatures().nextFeature( f2 ) );
-  QCOMPARE( f2.geometry(), f.geometry() );
+  QCOMPARE( f2.geometry().asWkt(), f.geometry().asWkt() );
 
   // we also must accept QgsProcessingOutputLayerDefinition - e.g. to allow outputs from earlier child algorithms in models
   params.insert( QStringLiteral( "layer" ), QgsProcessingOutputLayerDefinition( QgsProperty::fromValue( layer->id() ) ) );
@@ -5325,7 +5432,7 @@ void TestQgsProcessing::processingFeatureSource()
   // can't directly match it to layer, so instead just get the feature and test that it matches what we expect
   QVERIFY( source.get() );
   QVERIFY( source->getFeatures().nextFeature( f2 ) );
-  QCOMPARE( f2.geometry(), f.geometry() );
+  QCOMPARE( f2.geometry().asWkt(), f.geometry().asWkt() );
 }
 
 void TestQgsProcessing::processingFeatureSink()
@@ -6722,6 +6829,14 @@ void TestQgsProcessing::convertCompatible()
   // layer should be returned unchanged - underlying source is compatible
   QCOMPARE( out, layer->source() );
 
+  // path with layer suffix
+  QString vectorWithLayer = testDataDir + "points.shp|layername=points";
+  QgsVectorLayer *layer2 = new QgsVectorLayer( vectorWithLayer, "vl" );
+  p.addMapLayer( layer2 );
+  out = QgsProcessingUtils::convertToCompatibleFormat( layer2, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback );
+  // layer should be returned unchanged - underlying source is compatible
+  QCOMPARE( out, vector );
+
   // don't include shp as compatible type
   out = QgsProcessingUtils::convertToCompatibleFormat( layer, false, QStringLiteral( "test" ), QStringList() << "tab", QString( "tab" ), context, &feedback );
   QVERIFY( out != layer->source() );
@@ -6758,13 +6873,62 @@ void TestQgsProcessing::convertCompatible()
   t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
   QCOMPARE( t->featureCount(), static_cast< long >( ids.count() ) );
 
+  // using a feature filter -- this will require translation
+  layer->setSubsetString( "1 or 2" );
+  out = QgsProcessingUtils::convertToCompatibleFormat( layer, false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback );
+  QVERIFY( out != layer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), layer->featureCount() );
+  layer->setSubsetString( QString() );
+
+  // non-OGR source -- must be translated, regardless of extension. (e.g. delimited text provider handles CSV very different to OGR!)
+  std::unique_ptr< QgsVectorLayer > memLayer = qgis::make_unique< QgsVectorLayer> ( "Point", "v1", "memory" );
+  for ( int i = 1; i < 6; ++i )
+  {
+    QgsFeature f( i );
+    f.setGeometry( QgsGeometry( new QgsPoint( 1, 2 ) ) );
+    memLayer->dataProvider()->addFeatures( QgsFeatureList() << f );
+  }
+  out = QgsProcessingUtils::convertToCompatibleFormat( memLayer.get(), false, QStringLiteral( "test" ), QStringList() << "shp", QString( "shp" ), context, &feedback );
+  QVERIFY( out != memLayer->source() );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), memLayer->featureCount() );
+
+  //delimited text -- must be translated, regardless of extension. (delimited text provider handles CSV very different to OGR!)
+  QString csvPath = "file://" + testDataDir + "delimitedtext/testpt.csv?type=csv&useHeader=No&detectTypes=yes&xyDms=yes&geomType=none&subsetIndex=no&watchFile=no";
+  std::unique_ptr< QgsVectorLayer > csvLayer = qgis::make_unique< QgsVectorLayer >( csvPath, "vl", "delimitedtext" );
+  QVERIFY( csvLayer->isValid() );
+  out = QgsProcessingUtils::convertToCompatibleFormat( csvLayer.get(), false, QStringLiteral( "test" ), QStringList() << "csv", QString( "csv" ), context, &feedback );
+  QVERIFY( out != csvLayer->source() );
+  QVERIFY( out.endsWith( ".csv" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
+  t = qgis::make_unique< QgsVectorLayer >( out, "vl2" );
+  QCOMPARE( t->featureCount(), csvLayer->featureCount() );
+
+  // geopackage with layer
+  QString gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_gpkg";
+  std::unique_ptr< QgsVectorLayer > gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  out = QgsProcessingUtils::convertToCompatibleFormat( gpkgLayer.get(), false, QStringLiteral( "test" ), QStringList() << "gpkg" << "shp", QString( "shp" ), context, &feedback );
+  // layer must be translated -- we do not know if external tool can handle picking the correct layer automatically
+  QCOMPARE( out, testDataDir + QStringLiteral( "points_gpkg.gpkg" ) );
+  gpkgPath = testDataDir + "points_gpkg.gpkg|layername=points_small";
+  gpkgLayer = qgis::make_unique< QgsVectorLayer >( gpkgPath, "vl" );
+  QVERIFY( gpkgLayer->isValid() );
+  out = QgsProcessingUtils::convertToCompatibleFormat( gpkgLayer.get(), false, QStringLiteral( "test" ), QStringList() << "gpkg" << "shp", QString( "shp" ), context, &feedback );
+  QVERIFY( out.endsWith( ".shp" ) );
+  QVERIFY( out.startsWith( QgsProcessingUtils::tempFolder() ) );
 
   // also test evaluating parameter to compatible format
   std::unique_ptr< QgsProcessingParameterDefinition > def( new QgsProcessingParameterFeatureSource( QStringLiteral( "source" ) ) );
   QVariantMap params;
   params.insert( QStringLiteral( "source" ), QgsProcessingFeatureSourceDefinition( layer->id(), false ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
-  QCOMPARE( out, layer->source() );
+  QCOMPARE( out, testDataDir + "points.shp" );
 
   // incompatible format, will be converted
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "tab", QString( "tab" ), &feedback );
@@ -6775,7 +6939,7 @@ void TestQgsProcessing::convertCompatible()
   // layer as input
   params.insert( QStringLiteral( "source" ), QVariant::fromValue( layer ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
-  QCOMPARE( out, layer->source() );
+  QCOMPARE( out, testDataDir + "points.shp" );
 
   // incompatible format, will be converted
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "tab", QString( "tab" ), &feedback );
@@ -6794,12 +6958,12 @@ void TestQgsProcessing::convertCompatible()
   def.reset( new QgsProcessingParameterFeatureSource( QStringLiteral( "source" ), QString(), QList<int>(), QVariant::fromValue( layer ) ) );
   params.remove( QStringLiteral( "source" ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
-  QCOMPARE( out, layer->source() );
+  QCOMPARE( out, testDataDir + "points.shp" );
 
   // output layer as input - e.g. from a previous model child
   params.insert( QStringLiteral( "source" ), QgsProcessingOutputLayerDefinition( layer->id() ) );
   out = QgsProcessingParameters::parameterAsCompatibleSourceLayerPath( def.get(), params, context, QStringList() << "shp", QString( "shp" ), &feedback );
-  QCOMPARE( out, layer->source() );
+  QCOMPARE( out, testDataDir + "points.shp" );
 }
 
 void TestQgsProcessing::create()
@@ -6914,6 +7078,17 @@ void TestQgsProcessing::defaultExtensionsForProvider()
   settings.setValue( QStringLiteral( "Processing/DefaultOutputRasterLayerExt" ), QStringLiteral( "ecw" ), QgsSettings::Core );
   QCOMPARE( provider.defaultVectorFileExtension( true ), QStringLiteral( "mif" ) );
   QCOMPARE( provider.defaultRasterFileExtension(), QStringLiteral( "mig" ) );
+}
+
+void TestQgsProcessing::supportedExtensions()
+{
+  DummyProvider4 provider;
+  QCOMPARE( provider.supportedOutputVectorLayerExtensions().count(), 1 );
+  QCOMPARE( provider.supportedOutputVectorLayerExtensions().at( 0 ), QStringLiteral( "mif" ) );
+
+  // if supportedOutputTableExtensions is not implemented, supportedOutputVectorLayerExtensions should be used instead
+  QCOMPARE( provider.supportedOutputTableExtensions().count(), 1 );
+  QCOMPARE( provider.supportedOutputTableExtensions().at( 0 ), QStringLiteral( "mif" ) );
 }
 
 void TestQgsProcessing::supportsNonFileBasedOutput()

@@ -36,7 +36,6 @@ class QStringList;
 class QToolButton;
 class QTcpSocket;
 class QValidator;
-class QSystemTrayIcon;
 
 class QgisAppInterface;
 class QgisAppStyleSheet;
@@ -76,6 +75,7 @@ class QgsMapToolDigitizeFeature;
 class QgsMapToolAdvancedDigitizing;
 class QgsMapToolIdentifyAction;
 class QgsMapToolSelect;
+class QgsOptions;
 class QgsPluginLayer;
 class QgsPluginLayer;
 class QgsPluginManager;
@@ -100,9 +100,10 @@ class QgsVectorLayerTools;
 class QgsWelcomePage;
 class QgsOptionsWidgetFactory;
 class QgsStatusBar;
-
+class QgsGeometryValidationService;
+class QgsGeometryValidationDock;
+class QgsGeometryValidationModel;
 class QgsUserProfileManagerWidgetFactory;
-
 class Qgs3DMapCanvasDockWidget;
 
 class QDomDocument;
@@ -117,13 +118,11 @@ class QgsStatisticalSummaryDockWidget;
 class QgsMapCanvasTracer;
 
 class QgsDecorationItem;
-
 class QgsMessageLogViewer;
 class QgsMessageBar;
-
+class QgsMessageBarItem;
 class QgsDataItem;
 class QgsTileScaleWidget;
-
 class QgsLabelingWidget;
 class QgsLayerStylingWidget;
 class QgsDiagramProperties;
@@ -144,9 +143,7 @@ class QgsProxyProgressTask;
 
 #include "qgsauthmanager.h"
 #include "qgsconfig.h"
-#include "qgsfeature.h"
 #include "qgspointxy.h"
-#include "qgsmessagebar.h"
 #include "qgsmimedatautils.h"
 #include "qgswelcomepageitemsmodel.h"
 #include "qgsraster.h"
@@ -696,6 +693,13 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     //! Returns pointer to the identify map tool - used by identify tool in 3D view
     QgsMapToolIdentifyAction *identifyMapTool() const { return mMapTools.mIdentify; }
 
+    /**
+     * Take screenshots for user documentation
+     * @param saveDirectory path were the screenshots will be saved
+     * @param categories an int as a flag value of QgsAppScreenShots::Categories
+     */
+    void takeAppScreenShots( const QString &saveDirectory, const int categories = 0 );
+
   public slots:
     //! save current vector layer
     void saveAsFile( QgsMapLayer *layer = nullptr, bool onlySelected = false );
@@ -955,7 +959,7 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
      * Settings pages section
      */
     //! Gets map of option pages
-    QMap< QString, QString > optionsPagesMap();
+    QMap<QString, int> optionsPagesMap();
     //! Gets map of project property pages
     QMap< QString, QString > projectPropertiesPagesMap();
     //! Gets map of setting pages
@@ -966,7 +970,7 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     // End Settings pages section
 
     //! Opens the options dialog
-    void showOptionsDialog( QWidget *parent = nullptr, const QString &currentPage = QString() );
+    void showOptionsDialog( QWidget *parent = nullptr, const QString &currentPage = QString(), int pageNumber = -1 );
 
     /**
      * Refreshes the state of the layer actions toolbar action
@@ -1642,11 +1646,6 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     void toggleFilterLegendByExpression( bool );
     void updateFilterLegend();
 
-    /**
-     * Shows the statistical summary dock widget and brings it to the foreground
-     */
-    void showStatisticsDockWidget( bool show );
-
     //! Pushes a layer error to the message bar
     void onLayerError( const QString &msg );
 
@@ -1927,7 +1926,7 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
      * The \a isFloating and \a dockGeometry arguments can be used to specify an initial floating state
      * and widget geometry rect for the dock.
      */
-    void setupDockWidget( QDockWidget *dockWidget, bool isFloating = false, const QRect &dockGeometry = QRect(),
+    void setupDockWidget( QDockWidget *dockWidget, bool isFloating = false, QRect dockGeometry = QRect(),
                           Qt::DockWidgetArea area = Qt::RightDockWidgetArea );
 
     /**
@@ -1954,6 +1953,12 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
 
     //! Populates project "load from" / "save to" menu based on project storages (when the menu is about to be shown)
     void populateProjectStorageMenu( QMenu *menu, bool saving );
+
+    //! Create the option dialog
+    QgsOptions *createOptionsDialog( QWidget *parent = nullptr );
+
+    //! Returns the message bar of the datasource manager dialog if it is visible, the canvas's message bar otherwise.
+    QgsMessageBar *visibleMessageBar();
 
     QgisAppStyleSheet *mStyleSheetBuilder = nullptr;
 
@@ -2127,7 +2132,6 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
 
     //! interface to QgisApp for plugins
     QgisAppInterface *mQgisInterface = nullptr;
-    friend class QgisAppInterface;
 
     QSplashScreen *mSplash = nullptr;
     //! list of recently opened/saved project files
@@ -2265,8 +2269,6 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     bool gestureEvent( QGestureEvent *event );
     void tapAndHoldTriggered( QTapAndHoldGesture *gesture );
 
-    QSystemTrayIcon *mTray = nullptr;
-
     QgsLocatorWidget *mLocatorWidget = nullptr;
 
     QgsStatusBar *mStatusBar = nullptr;
@@ -2283,17 +2285,18 @@ class APP_EXPORT QgisApp : public QMainWindow, private Ui::MainWindow
     QgsFeature duplicateFeatures( QgsMapLayer *mlayer, const QgsFeature &feature );
     QgsFeature duplicateFeatureDigitized( QgsMapLayer *mlayer, const QgsFeature &feature );
 
-    //! Internal vars supporting Settings Pages function
-    QMap< QString, QString > mOptionsPagesMap;
-    QMap< QString, QString > mProjectPropertiesPagesMap;
-    QMap< QString, QString > mSettingPagesMap;
-
     QgsProxyProgressTask *mProjectLoadingProxyTask = nullptr;
 
     //! True if we are blocking the activeLayerChanged signal from being emitted
     bool mBlockActiveLayerChanged = false;
 
+    std::unique_ptr<QgsGeometryValidationService> mGeometryValidationService;
+    QgsGeometryValidationModel *mGeometryValidationModel = nullptr;
+    QgsGeometryValidationDock *mGeometryValidationDock = nullptr;
+
     friend class TestQgisAppPython;
+    friend class QgisAppInterface;
+    friend class QgsAppScreenShots;
 };
 
 #ifdef ANDROID

@@ -22,6 +22,7 @@
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QPlainTextEdit>
 
 #include "qgstest.h"
@@ -41,6 +42,7 @@
 #include "qgsdoublespinbox.h"
 #include "qgsspinbox.h"
 #include "qgsmapcanvas.h"
+#include "qgsprocessingmatrixparameterdialog.h"
 #include "models/qgsprocessingmodelalgorithm.h"
 
 class TestParamType : public QgsProcessingParameterDefinition
@@ -151,6 +153,8 @@ class TestProcessingGui : public QObject
     void testNumericWrapperInt();
     void testDistanceWrapper();
     void testRangeWrapper();
+    void testMatrixDialog();
+    void testMatrixWrapper();
 };
 
 void TestProcessingGui::initTestCase()
@@ -342,6 +346,20 @@ class TestProcessingContextGenerator : public QgsProcessingContextGenerator
     QgsProcessingContext &mContext;
 };
 
+
+class TestLayerWrapper : public QgsAbstractProcessingParameterWidgetWrapper
+{
+  public:
+    TestLayerWrapper( const QgsProcessingParameterDefinition *parameter = nullptr )
+      : QgsAbstractProcessingParameterWidgetWrapper( parameter )
+    {}
+    QWidget *createWidget() override { return nullptr; }
+    void setWidgetValue( const QVariant &val, QgsProcessingContext & ) override { v = val;}
+    QVariant widgetValue() const override { return v; }
+
+    QVariant v;
+};
+
 void TestProcessingGui::testWrapperDynamic()
 {
   const QgsProcessingAlgorithm *centroidAlg = QgsApplication::processingRegistry()->algorithmById( QStringLiteral( "native:centroids" ) );
@@ -375,15 +393,20 @@ void TestProcessingGui::testWrapperDynamic()
   QgsVectorLayer *vl = new QgsVectorLayer( QStringLiteral( "LineString" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   p.addMapLayer( vl );
 
+  TestLayerWrapper layerWrapper( layerDef );
+
   QVERIFY( !allPartsWrapper.mPropertyButton->vectorLayer() );
-  allPartsWrapper.setDynamicParentLayerParameter( QVariant::fromValue( vl ) );
+  layerWrapper.setWidgetValue( QVariant::fromValue( vl ), context );
+  allPartsWrapper.setDynamicParentLayerParameter( &layerWrapper );
   QCOMPARE( allPartsWrapper.mPropertyButton->vectorLayer(), vl );
   // should not be owned by wrapper
   QVERIFY( !allPartsWrapper.mDynamicLayer.get() );
-  allPartsWrapper.setDynamicParentLayerParameter( QVariant() );
+  layerWrapper.setWidgetValue( QVariant(), context );
+  allPartsWrapper.setDynamicParentLayerParameter( &layerWrapper );
   QVERIFY( !allPartsWrapper.mPropertyButton->vectorLayer() );
 
-  allPartsWrapper.setDynamicParentLayerParameter( vl->id() );
+  layerWrapper.setWidgetValue( vl->id(), context );
+  allPartsWrapper.setDynamicParentLayerParameter( &layerWrapper );
   QVERIFY( !allPartsWrapper.mPropertyButton->vectorLayer() );
   QVERIFY( !allPartsWrapper.mDynamicLayer.get() );
 
@@ -392,13 +415,15 @@ void TestProcessingGui::testWrapperDynamic()
   TestProcessingContextGenerator generator( context );
   allPartsWrapper.registerProcessingContextGenerator( &generator );
 
-  allPartsWrapper.setDynamicParentLayerParameter( vl->id() );
+  layerWrapper.setWidgetValue( vl->id(), context );
+  allPartsWrapper.setDynamicParentLayerParameter( &layerWrapper );
   QCOMPARE( allPartsWrapper.mPropertyButton->vectorLayer(), vl );
   QVERIFY( !allPartsWrapper.mDynamicLayer.get() );
 
   // non-project layer
   QString pointFileName = TEST_DATA_DIR + QStringLiteral( "/points.shp" );
-  allPartsWrapper.setDynamicParentLayerParameter( pointFileName );
+  layerWrapper.setWidgetValue( pointFileName, context );
+  allPartsWrapper.setDynamicParentLayerParameter( &layerWrapper );
   QCOMPARE( allPartsWrapper.mPropertyButton->vectorLayer()->publicSource(), pointFileName );
   // must be owned by wrapper, or layer may be deleted while still required by wrapper
   QCOMPARE( allPartsWrapper.mDynamicLayer->publicSource(), pointFileName );
@@ -1005,6 +1030,19 @@ void TestProcessingGui::testNumericWrapperDouble()
     QCOMPARE( wrapperOptionalDefault.parameterValue().toDouble(), 5.0 );
 
     delete w;
+
+    // with decimals
+    QgsProcessingParameterNumber paramDecimals( QStringLiteral( "num" ), QStringLiteral( "num" ), QgsProcessingParameterNumber::Double, QVariant(), true, 1, 1.02 );
+    QVariantMap metadata;
+    QVariantMap wrapperMetadata;
+    wrapperMetadata.insert( QStringLiteral( "decimals" ), 2 );
+    metadata.insert( QStringLiteral( "widget_wrapper" ), wrapperMetadata );
+    paramDecimals.setMetadata( metadata );
+    QgsProcessingNumericWidgetWrapper wrapperDecimals( &paramDecimals, type );
+    w = wrapperDecimals.createWrappedWidget( context );
+    QCOMPARE( static_cast< QgsDoubleSpinBox * >( wrapperDecimals.wrappedWidget() )->decimals(), 2 );
+    QCOMPARE( static_cast< QgsDoubleSpinBox * >( wrapperDecimals.wrappedWidget() )->singleStep(), 0.01 ); // single step should never be less than set number of decimals
+    delete w;
   };
 
   // standard wrapper
@@ -1201,6 +1239,8 @@ void TestProcessingGui::testDistanceWrapper()
   // test unit handling
   w->show();
 
+  QCOMPARE( wrapper.mLabel->text(), QStringLiteral( "<unknown>" ) );
+
   // crs values
   wrapper.setUnitParameterValue( QStringLiteral( "EPSG:3111" ) );
   QCOMPARE( wrapper.mLabel->text(), QStringLiteral( "meters" ) );
@@ -1278,6 +1318,28 @@ void TestProcessingGui::testDistanceWrapper()
   wrapper.setParameterValue( 5, context );
   QCOMPARE( wrapper.parameterValue().toDouble(), 5.0 );
 
+  delete w;
+
+  // with default unit
+  QgsProcessingParameterDistance paramDefaultUnit( QStringLiteral( "num" ), QStringLiteral( "num" ) );
+  paramDefaultUnit.setDefaultUnit( QgsUnitTypes::DistanceFeet );
+  QgsProcessingDistanceWidgetWrapper wrapperDefaultUnit( &paramDefaultUnit, QgsProcessingGui::Standard );
+  w = wrapperDefaultUnit.createWrappedWidget( context );
+  w->show();
+  QCOMPARE( wrapperDefaultUnit.mLabel->text(), QStringLiteral( "feet" ) );
+  delete w;
+
+  // with decimals
+  QgsProcessingParameterDistance paramDecimals( QStringLiteral( "num" ), QStringLiteral( "num" ), QVariant(), QString(), true, 1, 1.02 );
+  QVariantMap metadata;
+  QVariantMap wrapperMetadata;
+  wrapperMetadata.insert( QStringLiteral( "decimals" ), 2 );
+  metadata.insert( QStringLiteral( "widget_wrapper" ), wrapperMetadata );
+  paramDecimals.setMetadata( metadata );
+  QgsProcessingDistanceWidgetWrapper wrapperDecimals( &paramDecimals, QgsProcessingGui::Standard );
+  w = wrapperDecimals.createWrappedWidget( context );
+  QCOMPARE( wrapperDecimals.mDoubleSpinBox->decimals(), 2 );
+  QCOMPARE( wrapperDecimals.mDoubleSpinBox->singleStep(), 0.01 ); // single step should never be less than set number of decimals
   delete w;
 
   // batch wrapper
@@ -1426,6 +1488,88 @@ void TestProcessingGui::testRangeWrapper()
     QCOMPARE( wrapper2.parameterValue().toString(), QStringLiteral( "50,50" ) );
     wrapper2.mMinSpinBox->setValue( 100.1 );
     QCOMPARE( wrapper2.parameterValue().toString(), QStringLiteral( "100,100" ) );
+
+    delete w;
+  };
+
+  // standard wrapper
+  testWrapper( QgsProcessingGui::Standard );
+
+  // batch wrapper
+  testWrapper( QgsProcessingGui::Batch );
+
+  // modeler wrapper
+  testWrapper( QgsProcessingGui::Modeler );
+}
+
+void TestProcessingGui::testMatrixDialog()
+{
+  QgsProcessingParameterMatrix matrixParam( QString(), QString(), 3, false, QStringList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) );
+  std::unique_ptr< QgsProcessingMatrixParameterDialog > dlg = qgis::make_unique< QgsProcessingMatrixParameterDialog>( nullptr, nullptr, &matrixParam );
+  // variable length table
+  QVERIFY( dlg->mButtonAdd->isEnabled() );
+  QVERIFY( dlg->mButtonRemove->isEnabled() );
+  QVERIFY( dlg->mButtonRemoveAll->isEnabled() );
+
+  QCOMPARE( dlg->table(), QVariantList() );
+
+  dlg = qgis::make_unique< QgsProcessingMatrixParameterDialog >( nullptr, nullptr, &matrixParam, QVariantList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) << QStringLiteral( "c" ) << QStringLiteral( "d" ) << QStringLiteral( "e" ) << QStringLiteral( "f" ) );
+  QCOMPARE( dlg->table(), QVariantList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) << QStringLiteral( "c" ) << QStringLiteral( "d" ) << QStringLiteral( "e" ) << QStringLiteral( "f" ) );
+  dlg->addRow();
+  QCOMPARE( dlg->table(), QVariantList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) << QStringLiteral( "c" ) << QStringLiteral( "d" ) << QStringLiteral( "e" ) << QStringLiteral( "f" ) << QString() << QString() );
+  dlg->deleteAllRows();
+  QCOMPARE( dlg->table(), QVariantList() );
+
+  QgsProcessingParameterMatrix matrixParam2( QString(), QString(), 3, true, QStringList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) );
+  dlg = qgis::make_unique< QgsProcessingMatrixParameterDialog >( nullptr, nullptr, &matrixParam2, QVariantList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) << QStringLiteral( "c" ) << QStringLiteral( "d" ) << QStringLiteral( "e" ) << QStringLiteral( "f" ) );
+  QVERIFY( !dlg->mButtonAdd->isEnabled() );
+  QVERIFY( !dlg->mButtonRemove->isEnabled() );
+  QVERIFY( !dlg->mButtonRemoveAll->isEnabled() );
+}
+
+void TestProcessingGui::testMatrixWrapper()
+{
+  auto testWrapper = []( QgsProcessingGui::WidgetType type )
+  {
+    QgsProcessingContext context;
+
+    QgsProcessingParameterMatrix param( QStringLiteral( "matrix" ), QStringLiteral( "matrix" ), 3, false, QStringList() << QStringLiteral( "a" ) << QStringLiteral( "b" ) );
+    param.setDefaultValue( QStringLiteral( "0.0,100.0,150.0,250.0" ) );
+    QgsProcessingMatrixWidgetWrapper wrapper( &param, type );
+
+    QWidget *w = wrapper.createWrappedWidget( context );
+    QVERIFY( w );
+
+    // initial value
+    QCOMPARE( wrapper.parameterValue().toList(), QVariantList() << QStringLiteral( "0.0" ) << QStringLiteral( "100.0" ) << QStringLiteral( "150.0" ) << QStringLiteral( "250.0" ) );
+
+    QSignalSpy spy( &wrapper, &QgsProcessingMatrixWidgetWrapper::widgetValueHasChanged );
+    wrapper.setWidgetValue( QVariantList() << 5 << 7, context );
+    QCOMPARE( spy.count(), 1 );
+    QCOMPARE( wrapper.widgetValue().toList(), QVariantList() << QStringLiteral( "5" ) << QStringLiteral( "7" ) );
+    QCOMPARE( wrapper.mMatrixWidget->value(), QVariantList() << QStringLiteral( "5" ) << QStringLiteral( "7" ) );
+    wrapper.setWidgetValue( QStringLiteral( "28.1,36.5,5.5,8.9" ), context );
+    QCOMPARE( spy.count(), 2 );
+    QCOMPARE( wrapper.widgetValue().toList(), QVariantList() << QStringLiteral( "28.1" ) << QStringLiteral( "36.5" ) << QStringLiteral( "5.5" ) << QStringLiteral( "8.9" ) );
+    QCOMPARE( wrapper.mMatrixWidget->value(), QVariantList() << QStringLiteral( "28.1" ) << QStringLiteral( "36.5" ) << QStringLiteral( "5.5" ) << QStringLiteral( "8.9" ) );
+
+    QLabel *l = wrapper.createWrappedLabel();
+    if ( wrapper.type() != QgsProcessingGui::Batch )
+    {
+      QVERIFY( l );
+      QCOMPARE( l->text(), QStringLiteral( "matrix" ) );
+      QCOMPARE( l->toolTip(), param.toolTip() );
+      delete l;
+    }
+    else
+    {
+      QVERIFY( !l );
+    }
+
+    // check signal
+    wrapper.mMatrixWidget->setValue( QVariantList() << QStringLiteral( "7" ) << QStringLiteral( "9" ) );
+    QCOMPARE( spy.count(), 3 );
+    QCOMPARE( wrapper.widgetValue().toList(), QVariantList() << QStringLiteral( "7" ) << QStringLiteral( "9" ) );
 
     delete w;
   };

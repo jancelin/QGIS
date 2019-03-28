@@ -61,8 +61,8 @@ from qgis.core import (Qgis,
                        QgsProcessingParameterFile,
                        QgsProcessingParameterFolderDestination,
                        QgsProcessingOutputHtml,
-                       QgsProcessingUtils,
-                       QgsVectorLayer)
+                       QgsVectorLayer,
+                       QgsProviderRegistry)
 from qgis.utils import iface
 from osgeo import ogr
 
@@ -72,7 +72,6 @@ from processing.core.parameters import (getParameterFromString)
 
 from .Grass7Utils import Grass7Utils
 
-#from processing.tools import dataobjects, system
 from processing.tools.system import isWindows, getTempFilename
 
 pluginPath = os.path.normpath(os.path.join(
@@ -91,6 +90,7 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
     GRASS_RASTER_FORMAT_META = 'GRASS_RASTER_FORMAT_META'
     GRASS_VECTOR_DSCO = 'GRASS_VECTOR_DSCO'
     GRASS_VECTOR_LCO = 'GRASS_VECTOR_LCO'
+    GRASS_VECTOR_EXPORT_NOCAT = 'GRASS_VECTOR_EXPORT_NOCAT'
 
     OUTPUT_TYPES = ['auto', 'point', 'line', 'area']
     QGIS_OUTPUT_TYPES = {QgsProcessing.TypeVectorAnyGeometry: 'auto',
@@ -110,12 +110,15 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
         self.params = []
         self.hardcodedStrings = []
         self.inputLayers = []
+        self.commands = []
+        self.outputCommands = []
+        self.exportedLayers = {}
         self.descriptionFile = descriptionfile
 
         # Default GRASS parameters
         self.region = None
         self.cellSize = None
-        self.snaptTolerance = None
+        self.snapTolerance = None
         self.outputType = None
         self.minArea = None
         self.alignToResolution = None
@@ -183,7 +186,7 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
         """
         for p in self.params:
             # We use createOutput argument for automatic output creation
-            res = self.addParameter(p, True)
+            self.addParameter(p, True)
 
     def defineCharacteristicsFromFile(self):
         """
@@ -317,6 +320,15 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
             param.setFlags(param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
             self.params.append(param)
 
+            # Add a -c flag for export
+            param = QgsProcessingParameterBoolean(
+                self.GRASS_VECTOR_EXPORT_NOCAT,
+                self.tr('Also export features without category (not labeled). Otherwise only features with category are exported'),
+                False
+            )
+            param.setFlags(param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+            self.params.append(param)
+
     def getDefaultCellSize(self):
         """
         Determine a default cell size from all the raster layers.
@@ -437,7 +449,7 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
                                     QgsProcessingParameterMultipleLayers))]
         for param in inputs:
             paramName = param.name()
-            if not paramName in parameters:
+            if paramName not in parameters:
                 continue
             # Handle Null parameter
             if parameters[paramName] is None:
@@ -459,7 +471,7 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
                             paramName, parameters, context)
                     else:
                         self.loadVectorLayerFromParameter(
-                            paramName, parameters, context, feedback, None)
+                            paramName, parameters, context, external=None, feedback=feedback)
             # For multiple inputs, process each layer
             elif isinstance(param, QgsProcessingParameterMultipleLayers):
                 layers = self.parameterAsLayerList(parameters, paramName, context)
@@ -470,7 +482,7 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
                         self.loadRasterLayer(layerName, layer)
                     # Add a vector layer
                     elif layer.type() == QgsMapLayer.VectorLayer:
-                        self.loadVectorLayer(layerName, layer, None)
+                        self.loadVectorLayer(layerName, layer, external=None, feedback=feedback)
 
         self.postInputs()
 
@@ -531,7 +543,8 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
                              self.GRASS_RASTER_FORMAT_OPT,
                              self.GRASS_RASTER_FORMAT_META,
                              self.GRASS_VECTOR_DSCO,
-                             self.GRASS_VECTOR_LCO]:
+                             self.GRASS_VECTOR_LCO,
+                             self.GRASS_VECTOR_EXPORT_NOCAT]:
                 continue
 
             # Raster and vector layers
@@ -618,15 +631,13 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
                     if outName in parameters and parameters[outName] is not None:
                         # for HTML reports, we need to redirect stdout
                         if out.defaultFileExtension().lower() == 'html':
-                            command += ' > "{}"'.format(
-                                self.parameterAsFileOutput(
-                                    parameters, outName, context)
-                            )
+                            command += ' {}=- > "{}"'.format(
+                                outName,
+                                self.parameterAsFileOutput(parameters, outName, context))
                         else:
                             command += ' {}="{}"'.format(
                                 outName,
-                                self.parameterAsFileOutput(
-                                    parameters, outName, context))
+                                self.parameterAsFileOutput(parameters, outName, context))
                 # For folders destination
                 elif isinstance(out, QgsProcessingParameterFolderDestination):
                     # We need to add a unique temporary basename
@@ -636,7 +647,6 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
                     if outName in parameters and parameters[outName] is not None:
                         # We add an output name to make sure it is unique if the session
                         # uses this algorithm several times.
-                        #value = self.parameterAsOutputLayer(parameters, outName, context)
                         uniqueOutputName = outName + self.uniqueSuffix
                         command += ' {}={}'.format(outName, uniqueOutputName)
 
@@ -665,7 +675,7 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
 
         for out in self.destinationParameterDefinitions():
             outName = out.name()
-            if not outName in parameters:
+            if outName not in parameters:
                 # skipped output
                 continue
 
@@ -781,15 +791,22 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
 
         # Add a loop export from the basename
         for cmd in [self.commands, self.outputCommands]:
-            # TODO Windows support
             # TODO Format/options support
-            cmd.append("for r in $(g.list type=rast pattern='{}*'); do".format(basename))
-            cmd.append("  r.out.gdal -m{0} input=${{r}} output={1}/${{r}}.tif {2}".format(
-                ' -t' if colorTable else '', outDir,
-                '--overwrite -c createopt="TFW=YES,COMPRESS=LZW"'
-            )
-            )
-            cmd.append("done")
+            if isWindows():
+                cmd.append("if not exist {0} mkdir {0}".format(outDir))
+                cmd.append("for /F %%r IN ('g.list type^=rast pattern^=\"{0}*\"') do r.out.gdal -m{1} input=%%r output={2}/%%r.tif {3}".format(
+                    basename,
+                    ' -t' if colorTable else '',
+                    outDir,
+                    '--overwrite -c createopt="TFW=YES,COMPRESS=LZW"'
+                ))
+            else:
+                cmd.append("for r in $(g.list type=rast pattern='{}*'); do".format(basename))
+                cmd.append("  r.out.gdal -m{0} input=${{r}} output={1}/${{r}}.tif {2}".format(
+                    ' -t' if colorTable else '', outDir,
+                    '--overwrite -c createopt="TFW=YES,COMPRESS=LZW"'
+                ))
+                cmd.append("done")
 
     def loadVectorLayerFromParameter(self, name, parameters, context, feedback, external=False):
         """
@@ -801,50 +818,73 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
         :param external: use v.external (v.in.ogr if False).
         """
         layer = self.parameterAsVectorLayer(parameters, name, context)
-        if layer is None or layer.dataProvider().name() != 'ogr':
+
+        is_ogr_disk_based_layer = layer is not None and layer.dataProvider().name() == 'ogr'
+        if is_ogr_disk_based_layer:
+            # we only support direct reading of disk based ogr layers -- not ogr postgres layers, etc
+            source_parts = QgsProviderRegistry.instance().decodeUri('ogr', layer.source())
+            if not source_parts.get('path'):
+                is_ogr_disk_based_layer = False
+            elif source_parts.get('layerId'):
+                # no support for directly reading layers by id in grass
+                is_ogr_disk_based_layer = False
+
+        if not is_ogr_disk_based_layer:
             # parameter is not a vector layer or not an OGR layer - try to convert to a source compatible with
             # grass OGR inputs and extract selection if required
             path = self.parameterAsCompatibleSourceLayerPath(parameters, name, context,
                                                              QgsVectorFileWriter.supportedFormatExtensions(),
                                                              feedback=feedback)
             ogr_layer = QgsVectorLayer(path, '', 'ogr')
-            self.loadVectorLayer(name, ogr_layer, external)
+            self.loadVectorLayer(name, ogr_layer, external=external, feedback=feedback)
         else:
-            # already an ogr layer source
-            self.loadVectorLayer(name, layer, external)
+            # already an ogr disk based layer source
+            self.loadVectorLayer(name, layer, external=external, feedback=feedback)
 
-    def loadVectorLayer(self, name, layer, external=False):
+    def loadVectorLayer(self, name, layer, external=False, feedback=None):
         """
         Creates a dedicated command to load a vector into
         temporary GRASS DB.
         :param name: name of the parameter
         :param layer: QgsMapLayer for the vector layer.
         :param external: use v.external (v.in.ogr if False).
+        :param feedback: feedback object
         """
         # TODO: support multiple input formats
         if external is None:
             external = ProcessingConfig.getSetting(
                 Grass7Utils.GRASS_USE_VEXTERNAL)
 
+        source_parts = QgsProviderRegistry.instance().decodeUri('ogr', layer.source())
+        file_path = source_parts.get('path')
+        layer_name = source_parts.get('layerName')
+
         # safety check: we can only use external for ogr layers which support random read
         if external:
-            ds = ogr.Open(layer.source())
+            if feedback is not None:
+                feedback.pushInfo('Attempting to use v.external for direct layer read')
+            ds = ogr.Open(file_path)
             if ds is not None:
                 ogr_layer = ds.GetLayer()
                 if ogr_layer is None or not ogr_layer.TestCapability(ogr.OLCRandomRead):
+                    if feedback is not None:
+                        feedback.reportError('Cannot use v.external: layer does not support random read')
                     external = False
             else:
+                if feedback is not None:
+                    feedback.reportError('Cannot use v.external: error reading layer')
                 external = False
 
         self.inputLayers.append(layer)
         self.setSessionProjectionFromLayer(layer)
         destFilename = 'vector_{}'.format(os.path.basename(getTempFilename()))
         self.exportedLayers[name] = destFilename
-        command = '{0}{1}{2} input="{3}" output="{4}" --overwrite -o'.format(
+        command = '{0}{1}{2} input="{3}"{4} output="{5}" --overwrite -o'.format(
             'v.external' if external else 'v.in.ogr',
             ' min_area={}'.format(self.minArea) if not external else '',
             ' snap={}'.format(self.snapTolerance) if not external else '',
-            os.path.normpath(layer.source()),
+            os.path.normpath(file_path),
+            ' layer="{}"'.format(layer_name) if layer_name else '',
             destFilename)
         self.commands.append(command)
 
@@ -873,10 +913,11 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
         outFormat = QgsVectorFileWriter.driverForExtension(os.path.splitext(fileName)[1]).replace(' ', '_')
         dsco = self.parameterAsString(parameters, self.GRASS_VECTOR_DSCO, context)
         lco = self.parameterAsString(parameters, self.GRASS_VECTOR_LCO, context)
-        self.exportVectorLayer(grassName, fileName, layer, nocats, dataType, outFormat, dsco, lco)
+        exportnocat = self.parameterAsBool(parameters, self.GRASS_VECTOR_EXPORT_NOCAT, context)
+        self.exportVectorLayer(grassName, fileName, layer, nocats, dataType, outFormat, dsco, lco, exportnocat)
 
     def exportVectorLayer(self, grassName, fileName, layer=None, nocats=False, dataType='auto',
-                          outFormat=None, dsco=None, lco=None):
+                          outFormat=None, dsco=None, lco=None, exportnocat=False):
         """
         Creates a dedicated command to export a vector from
         temporary GRASS DB into a file via OGR.
@@ -888,19 +929,21 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
         :param outFormat: file format for export.
         :param dsco: datasource creation options for format.
         :param lco: layer creation options for format.
+        :param exportnocat: do not export features without categories.
         """
         if outFormat is None:
             outFormat = QgsVectorFileWriter.driverForExtension(os.path.splitext(fileName)[1]).replace(' ', '_')
 
         for cmd in [self.commands, self.outputCommands]:
             cmd.append(
-                'v.out.ogr{0} type="{1}" input="{2}" output="{3}" format="{4}" {5}{6}{7} --overwrite'.format(
-                    '' if nocats else ' -c',
+                'v.out.ogr{0} type="{1}" input="{2}" output="{3}" format="{4}" {5}{6}{7}{8} --overwrite'.format(
+                    '' if nocats else '',
                     dataType, grassName, fileName,
                     outFormat,
                     'layer={}'.format(layer) if layer else '',
                     ' dsco="{}"'.format(dsco) if dsco else '',
-                    ' lco="{}"'.format(lco) if lco else ''
+                    ' lco="{}"'.format(lco) if lco else '',
+                    ' -c' if exportnocat else ''
                 )
             )
 
@@ -972,7 +1015,6 @@ class Grass7Algorithm(QgsProcessingAlgorithm):
     def convertToHtml(self, fileName):
         # Read HTML contents
         lines = []
-        html = False
         with open(fileName, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 

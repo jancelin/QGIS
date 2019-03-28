@@ -94,7 +94,6 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
         self.populateQueryHistory()
         self.btnQueryHistory.toggled.connect(self.showHideQueryHistory)
 
-        self.btnCancel.setText(self.tr("Cancel (ESC)"))
         self.btnCancel.setEnabled(False)
         self.btnCancel.clicked.connect(self.executeSqlCanceled)
         try:
@@ -314,7 +313,7 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
 
     def executeSql(self):
 
-        sql = self._getSqlQuery()
+        sql = self._getExecutableSqlQuery()
         if sql == "":
             return
 
@@ -356,7 +355,7 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
         else:
             geomFieldName = None
 
-        query = self._getSqlQuery()
+        query = self._getExecutableSqlQuery()
         if query == "":
             return None
 
@@ -388,6 +387,8 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
         if layer.isValid():
             return layer
         else:
+            e = BaseError(self.tr("There was an error creating the SQL layer, please check the logs for further information."))
+            DlgDbError.showError(e, self)
             return None
 
     def loadSqlLayer(self):
@@ -399,7 +400,7 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
             QgsProject.instance().addMapLayers([layer], True)
 
     def fillColumnCombos(self):
-        query = self._getSqlQuery()
+        query = self._getExecutableSqlQuery()
         if query == "":
             return
 
@@ -532,7 +533,7 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
             dictionary = getSqlDictionary()
 
         wordlist = []
-        for name, value in list(dictionary.items()):
+        for _, value in dictionary.items():
             wordlist += value  # concat lists
         wordlist = list(set(wordlist))  # remove duplicates
 
@@ -551,10 +552,10 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
             self.editSql.setText(dlg.query)
 
     def createView(self):
-        name, ok = QInputDialog.getText(None, "View name", "View name")
+        name, ok = QInputDialog.getText(None, self.tr("View Name"), self.tr("View name"))
         if ok:
             try:
-                self.db.connector.createSpatialView(name, self._getSqlQuery())
+                self.db.connector.createSpatialView(name, self._getExecutableSqlQuery())
             except BaseError as e:
                 DlgDbError.showError(e, self)
 
@@ -563,6 +564,17 @@ class DlgSqlWindow(QWidget, Ui_Dialog):
         if len(sql) == 0:
             sql = self.editSql.text()
         return sql
+
+    def _getExecutableSqlQuery(self):
+        sql = self._getSqlQuery()
+
+        # Clean it up!
+        lines = []
+        for line in sql.split('\n'):
+            if not line.strip().startswith('--'):
+                lines.append(line)
+        sql = ' '.join(lines)
+        return sql.strip()
 
     def uniqueChanged(self):
         # when an item is (un)checked, simply trigger an update of the combobox text

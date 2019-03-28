@@ -33,7 +33,7 @@
 #include "qgsmaplayer.h"
 #include "qgscoordinatereferencesystem.h"
 #include "qgsmimedatautils.h"
-
+#include "qgswkbtypes.h"
 
 class QgsDataProvider;
 class QgsDataItem;
@@ -207,24 +207,50 @@ class CORE_EXPORT QgsDataItem : public QObject
     enum Capability
     {
       NoCapabilities    = 0,
-      SetCrs            = 1 << 0, //!< Can set CRS on layer or group of layers
+      SetCrs            = 1 << 0, //!< Can set CRS on layer or group of layers. \deprecated in QGIS 3.6 -- no longer used by QGIS and will be removed in QGIS 4.0
       Fertile           = 1 << 1, //!< Can create children. Even items without this capability may have children, but cannot create them, it means that children are created by item ancestors.
       Fast              = 1 << 2, //!< CreateChildren() is fast enough to be run in main thread when refreshing items, most root items (wms,wfs,wcs,postgres...) are considered fast because they are reading data only from QgsSettings
-      Collapse          = 1 << 3  //!< The collapse/expand status for this items children should be ignored in order to avoid undesired network connections (wms etc.)
+      Collapse          = 1 << 3,  //!< The collapse/expand status for this items children should be ignored in order to avoid undesired network connections (wms etc.)
+      Rename            = 1 << 4, //!< Item can be renamed
     };
     Q_DECLARE_FLAGS( Capabilities, Capability )
 
     /**
      * Writes the selected crs into data source. The original data source will be modified when calling this
      * method.
+     *
+     * \deprecated since QGIS 3.6. This method is no longer used by QGIS and will be removed in QGIS 4.0.
      */
-    virtual bool setCrs( const QgsCoordinateReferenceSystem &crs ) { Q_UNUSED( crs ); return false; }
+    Q_DECL_DEPRECATED virtual bool setCrs( const QgsCoordinateReferenceSystem &crs ) SIP_DEPRECATED
+    {
+      Q_UNUSED( crs );
+      return false;
+    }
 
-    // ### QGIS 3 - rename to capabilities()
+    /**
+     * Sets a new \a name for the item, and returns true if the item was successfully renamed.
+     *
+     * Items which implement this method should return the QgsDataItem::Rename capability.
+     *
+     * The default implementation does nothing.
+     *
+     * \since QGIS 3.4
+     */
+    virtual bool rename( const QString &name );
+
+    // ### QGIS 4 - rename to capabilities()
+
+    /**
+     * Returns the capabilities for the data item.
+     *
+     * \see setCapabilities()
+     */
     virtual Capabilities capabilities2() const { return mCapabilities; }
 
     /**
      * Sets the capabilities for the data item.
+     *
+     * \see capabilities2()
      */
     virtual void setCapabilities( Capabilities capabilities ) { mCapabilities = capabilities; }
 
@@ -522,6 +548,20 @@ class CORE_EXPORT QgsDataCollectionItem : public QgsDataItem
 
     static QIcon iconDir(); // shared icon: open/closed directory
     static QIcon iconDataCollection(); // default icon for data collection
+
+  protected:
+
+    /**
+     * Shared open directory icon.
+     * \since QGIS 3.4
+     */
+    static QIcon openDirIcon();
+
+    /**
+     * Shared home directory icon.
+     * \since QGIS 3.4
+     */
+    static QIcon homeDirIcon();
 };
 
 /**
@@ -768,10 +808,7 @@ class CORE_EXPORT QgsFavoriteItem : public QgsDirectoryItem
 
     QgsFavoriteItem( QgsFavoritesItem *parent, const QString &name, const QString &dirPath, const QString &path );
 
-    /**
-     * Sets a new \a name for the favorite, storing the new name permanently for the favorite.
-     */
-    void rename( const QString &name );
+    bool rename( const QString &name ) override;
 
   private:
 

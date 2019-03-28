@@ -87,7 +87,7 @@ class CORE_EXPORT QgsVectorLayerUtils
      * \param fieldOrExpression field name or an expression string
      * \param ok will be set to false if field or expression is invalid, otherwise true
      * \param selectedOnly set to true to get values from selected features only
-     * \param feedback optional feedback object to allow cancelation
+     * \param feedback optional feedback object to allow cancellation
      * \returns list of fetched values
      * \see getDoubleValues
      * \since QGIS 3.0
@@ -102,7 +102,7 @@ class CORE_EXPORT QgsVectorLayerUtils
      * \param ok will be set to false if field or expression is invalid, otherwise true
      * \param selectedOnly set to true to get values from selected features only
      * \param nullCount optional pointer to integer to store number of null values encountered in
-     * \param feedback optional feedback object to allow cancelation
+     * \param feedback optional feedback object to allow cancellation
      * \returns list of fetched values
      * \see getValues
      * \since QGIS 3.0
@@ -162,11 +162,14 @@ class CORE_EXPORT QgsVectorLayerUtils
      * This should be used in scenarios, where a ``QWeakPointer<QgsVectorLayer>`` is kept in a thread
      * and features should be fetched from this layer. Using the layer directly is not safe to do.
      * The result will be ``nullptr`` if the layer has been deleted.
+     * If \a feedback is specified, the call will return if the feedback is canceled.
+     * Returns a new feature source for the \a layer. The source may be a nullptr if the layer no longer
+     * exists or if the feedback is canceled.
      *
      * \note Requires Qt >= 5.10 to make use of the thread-safe implementation
      * \since QGIS 3.4
      */
-    static std::unique_ptr<QgsVectorLayerFeatureSource> getFeatureSource( QPointer<QgsVectorLayer> layer ) SIP_SKIP;
+    static std::unique_ptr<QgsVectorLayerFeatureSource> getFeatureSource( QPointer<QgsVectorLayer> layer, QgsFeedback *feedback = nullptr ) SIP_SKIP;
 
     /**
      * Matches the attributes in \a feature to the specified \a fields.
